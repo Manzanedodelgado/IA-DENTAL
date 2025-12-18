@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+.pnp*
+.yarn/*
+
+# Build output
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# WhatsApp Session Data (IMPORTANT: contains auth tokens)
+whatsapp-worker/auth_info/
+whatsapp-worker/node_modules/
+
+# Vite
+*.local
