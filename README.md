@@ -1,157 +1,245 @@
-# Sistema de Gestión Integral - Rubio García Dental
+# IA-DENTAL 🦷🤖
 
-Sistema completo de gestión dental desarrollado con Next.js 14, TypeScript, y Prisma.
+Sistema integral de gestión dental con Inteligencia Artificial.
 
-## 🚀 Stack Tecnológico
+## 🎯 Proyectos Incluidos
 
-- **Frontend**: Next.js 14 (App Router), React 19, TypeScript, Tailwind CSS
-- **Backend**: Next.js API Routes, tRPC
-- **Database**: PostgreSQL 16+ con Prisma ORM
-- **Auth**: NextAuth.js con JWT
-- **State**: Zustand + React Query
-- **Forms**: React Hook Form + Zod
+### 1. **QABot** - Quality Assurance & Business Intelligence Bot
+Sistema de análisis y consultas SQL mediante lenguaje natural para la base de datos GELITE.
 
-## 📋 Requisitos
+**Ubicación**: `/qabot/`
 
-- Node.js 20 LTS o superior
-- PostgreSQL 16+ (local o en la nube)
-- npm o yarn
+**Características**:
+- 🤖 Gemini 2.5 Flash para generación de SQL
+- 📊 Consultas en lenguaje natural
+- ✅ Tests de integridad automáticos
+- 📈 Analytics y métricas de negocio
+- 🔒 100% local (salvo LLM en Google Cloud)
 
-## 🛠️ Setup Inicial
+**Stack**:
+- Python 3.10+
+- FastAPI + Uvicorn
+- SQL Server (GELITE database)
+- Gemini 2.5 Flash
+- SQLAlchemy + pyodbc
 
-1. **Instalar dependencias:**
+**Quick Start**:
 ```bash
+cd qabot
+pip install -r requirements.txt
+python cli.py
+```
+
+---
+
+### 2. **RubioGarciaDental** - Aplicación Web Completa
+Sistema de gestión integral para clínica dental con IA integrada.
+
+**Ubicación**: `/rubio-garcia-dental-integrated/`
+
+**Características**:
+- 📱 Dashboard con estadísticas en tiempo real
+- 📅 Agenda visual con gestión de citas
+- 👥 Gestión completa de pacientes
+- 💬 Comunicación WhatsApp con IA
+- 🤖 Alveolo IA - Asistente inteligente dual:
+  - Modo Administrador: Consultas SQL en lenguaje natural
+  - Modo Paciente: Chat amable sin acceso a datos sensibles
+- 💼 Gestión de presupuestos, facturas y cobros
+- 📄 Gestión documental
+- 🔧 Configuración del sistema
+
+**Stack**:
+- React 18 + TypeScript
+- Vite como build tool
+- TailwindCSS para diseño
+- Node.js + Express (backend)
+- SQL Server (GELITE)
+- Gemini 2.5 Flash
+
+**Quick Start**:
+```bash
+cd rubio-garcia-dental-integrated
 npm install
+npm run start:all  # Inicia backend + frontend
 ```
 
-2. **Configurar variables de entorno:**
-Copiar `.env.local` y configurar las variables necesarias.
+---
 
-Importante: Configurar `DATABASE_URL` con tu base de datos PostgreSQL:
-```
-DATABASE_URL="postgresql://user:password@localhost:5432/rubiogarciadental?schema=public"
+## 🚀 Instalación Completa
+
+### Requisitos Previos
+
+1. **Base de Datos**:
+   - SQL Server con base de datos GELITE
+   - Ver `qabot/setup_sql_server.sql` para configuración
+
+2. **API Keys**:
+   - Gemini API Key (gratis hasta 1,500 queries/día)
+   - Obtener en: https://ai.google.dev/
+
+3. **Software**:
+   - Python 3.10+ (para QABot)
+   - Node.js 18+ (para la app web)
+   - ODBC Driver 17 for SQL Server
+
+---
+
+### Setup Rápido
+
+#### 1. Configurar QABot (Servidor GABINETE2)
+
+```powershell
+# Clonar repo
+git clone https://github.com/Manzanedodelgado/IA-DENTAL.git
+cd IA-DENTAL/qabot
+
+# Crear entorno virtual
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+
+# Instalar dependencias
+pip install -r requirements.txt
+
+# Configurar conexión local
+# Editar config.py: DB_SERVER = "localhost\\INFOMED"
+
+# Ejecutar
+python cli.py
 ```
 
-3. **Generar cliente Prisma:**
+#### 2. Configurar Aplicación Web
+
 ```bash
-npm run prisma:generate
+# En Mac o GABINETE2
+cd IA-DENTAL/rubio-garcia-dental-integrated
+
+# Instalar dependencias
+npm install
+
+# Crear archivo .env
+cp .env.example .env
+# Editar .env y añadir tu VITE_API_KEY
+
+# Iniciar todo
+npm run start:all
 ```
 
-4. **Crear base de datos y ejecutar migraciones:**
-```bash
-npm run prisma:migrate
+---
+
+## 🌐 Despliegue en Producción
+
+Para acceso desde cualquier lugar, sigue la guía completa en:
+- **Vercel + Cloudflare Tunnel**: Ver `vercel_cloudflare_deploy.md`
+
+**Arquitectura de Producción**:
+```
+Usuario → Vercel (Frontend) → Cloudflare Tunnel → GABINETE2 (Backend + DB)
 ```
 
-5. **Poblar base de datos con datos iniciales (seed):**
-```bash
-npm run prisma:seed
+**Coste**: €0/mes
+
+---
+
+## 📊 Ejemplos de Uso
+
+### QABot - Consultas Naturales
+
+```python
+# Opción 3: Natural Language Query
+>>> ¿Cuántos pacientes tenemos en total?
+
+✅ Resultado: 6,110 pacientes
+
+SQL Generado:
+SELECT COUNT(*) AS TotalPacientes FROM Pacientes
+
+Insights:
+- Gran base de pacientes (6,110)
+- Oportunidad de segmentación (activos/inactivos)
+- Recomendación: Campañas de reactivación
 ```
 
-Este comando crea:
-- 5 usuarios (Admin + 4 doctores del equipo médico)
-- Horarios de cada doctor
-- Métodos de pago (Efectivo, Tarjeta, Transferencia, Bizum, Financiación)
-- Precios de tratamientos (Limpieza, Blanqueamiento, Empaste, etc.)
-- Configuración de clínica
-
-6. **Iniciar servidor de desarrollo:**
-```bash
-npm run dev
-```
-
-Abrir [http://localhost:3000](http://localhost:3000)
-
-## 👥 Usuarios de Prueba
-
-Todos los usuarios tienen la misma contraseña: `190582`
-
-- **Admin**: info@rubiogarciadental.com
-- **Dr. Mario Rubio García** (Implantología): mario.rubio@rubiogarciadental.com
-- **Dra. Virginia Tresgallo** (Ortodoncia): virginia.tresgallo@rubiogarciadental.com
-- **Dra. Irene García** (Endodoncia): irene.garcia@rubiogarciadental.com
-- **Tc. Juan Antonio Manzanedo** (Higienista): juan.manzanedo@rubiogarciadental.com
-
-## 📁 Estructura del Proyecto
+### Aplicación Web - IA Dental
 
 ```
-src/
-├── app/                    # Next.js App Router
-│   ├── api/               # API Routes  
-│   │   └── auth/          # NextAuth.js
-│   ├── clinica/           # Módulo Clínica
-│   │   ├── agenda/        # Calendar y citas
-│   │   ├── pacientes/     # CRUD pacientes
-│   │   └── historia/      # Historia clínica
-│   ├── gestion/           # Módulo Gestión
-│   │   └── facturas/      # Facturación VeriFactu
-│   ├── ia/                # Módulo IA
-│   │   ├── documentos/    # Templates
-│   │   ├── automatizaciones/ # Workflows
-│   │   ├── agente/        # Agente IA
-│   │   └── voz/           # AI por voz
-│   └── config/            # Configuración
-│       ├── usuarios/      # Gestión usuarios
-│       └── tablas/        # Tablas maestras
-├── components/            # Componentes React
-├── lib/                   # Librerías y utilidades
-│   ├── prisma.ts         # Prisma client
-│   ├── auth.ts           # NextAuth config
-│   └── trpc/             # tRPC setup
-├── hooks/                # Custom React hooks
-├── store/                # Zustand stores
-├── types/                # TypeScript types
-└── utils/                # Funciones utilidades
+Usuario: "Busca pacientes con apellido García"
 
-prisma/
-├── schema.prisma         # Schema de BD (25+ modelos)
-└── seed.ts              # Datos iniciales
+IA Dental:
+✅ SQL: SELECT TOP 10 IdPac, Nombre, Apellidos 
+        FROM Pacientes 
+        WHERE Apellidos LIKE '%García%'
+
+📊 Resultados: 23 pacientes encontrados
 ```
 
-## 🗄️ Modelos de Base de Datos
-
-- **Users & Auth**: Users, Sessions, Roles (ADMIN, DOCTOR, RECEPTIONIST, HYGIENIST)
-- **Patients**: Patients, MedicalHistory, Treatments, Photos, Alerts, SignedDocuments
-- **Appointments**: Appointments, Reminders (EMAIL, WHATSAPP, SMS)
-- **Invoices**: Invoices, InvoiceItems (VeriFactu compliant)
-- **WhatsApp**: WhatsAppMessages (con detección de urgencias IA)
-- **IA**: Templates, Automations
-- **Configuration**: Settings, AuditLogs, DoctorSchedules, TreatmentPrices, PaymentMethods
-
-## 🚧 Estado de Implementación
-
-✅ **Completado:**
-- Setup inicial del proyecto Next.js 14
-- Instalación de dependencias (Prisma, NextAuth, tRPC, etc.)
-- Schema Prisma completo con 25+ modelos
-- Estructura modular de carpetas
-- Configuración de Prisma y NextAuth
-- Script de seed con datos iniciales
-
-🔄 **Pendiente:**
-- Configurar base de datos PostgreSQL
-- Ejecutar migraciones
-- Implementar módulos (Clínica, Gestión, IA, Config)
-
-## 📝 Scripts Disponibles
-
-- `npm run dev` - Servidor de desarrollo
-- `npm run build` - Build de producción
-- `npm run start` - Servidor de producción
-- `npm run lint` - Linter
-- `npm run prisma:generate` - Generar cliente Prisma
-- `npm run prisma:migrate` - Ejecutar migraciones
-- `npm run prisma:studio` - Abrir Prisma Studio (explorador de BD)
-- `npm run prisma:seed` - Poblar BD con datos iniciales
+---
 
 ## 🔐 Seguridad
 
-- Autenticación JWT con NextAuth.js
-- Passwords hasheados con bcrypt (12 rounds)
-- RBAC (Role-Based Access Control)
-- Input validation con Zod
-- SQL injection prevention (Prisma ORM)
-- XSS protection (React default + CSP headers)
+- ✅ Datos de pacientes NUNCA salen del servidor local
+- ✅ Solo el schema de DB se envía a Gemini para generar SQL
+- ✅ Backend solo permite queries SELECT (no destructivos)
+- ✅ API Keys en archivos .env (no versionados)
+- ✅ Autenticación robusta en la app web
 
-## 📄 Licencia
+---
 
-Privado - Rubio García Dental © 2025
+## 📁 Estructura del Repositorio
+
+```
+IA-DENTAL/
+├── qabot/                          # QABot - Sistema de consultas IA
+│   ├── core/                       # Módulos principales
+│   │   ├── database.py            # Conexión a GELITE
+│   │   ├── llm_client.py          # Cliente Gemini
+│   │   ├── orchestrator.py        # Orquestador principal
+│   │   └── schema_knowledge.py    # Conocimiento del schema
+│   ├── qa/                         # Tests de calidad
+│   ├── analytics/                  # Métricas de negocio
+│   ├── api/                        # API REST
+│   ├── config.py                   # Configuración
+│   ├── cli.py                      # Interfaz CLI
+│   └── main.py                     # Servidor API
+│
+├── rubio-garcia-dental-integrated/ # Aplicación Web Completa
+│   ├── src/
+│   │   ├── components/            # Componentes React
+│   │   ├── services/              # Servicios (DB, IA, etc.)
+│   │   └── hooks/                 # Custom hooks
+│   ├── server.js                  # Backend Node.js
+│   └── package.json
+│
+└── README.md                       # Este archivo
+```
+
+---
+
+## 🤝 Contribución
+
+Este es un proyecto privado para Rubio García Dental.
+
+---
+
+## 📝 Licencia
+
+© 2025 Rubio García Dental. Todos los derechos reservados.
+
+---
+
+## 📞 Soporte
+
+Para dudas o problemas:
+- Email: juanantoniomanzanedodelgado@gmail.com
+- GitHub Issues: https://github.com/Manzanedodelgado/IA-DENTAL/issues
+
+---
+
+## 🎯 Estado del Proyecto
+
+- ✅ QABot: Funcional y probado (100% operativo)
+- ✅ Aplicación Web: Completa con IA integrada
+- ✅ Integración Gemini: Configurada y optimizada
+- 🔄 Despliegue Producción: Pendiente (guía lista)
+
+**Última actualización**: 18 Diciembre 2025
