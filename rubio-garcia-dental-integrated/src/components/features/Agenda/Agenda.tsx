@@ -9,27 +9,42 @@ const MOCK_APPOINTMENTS: Appointment[] = [
         id: 1,
         patientName: 'María García',
         date: new Date(2024, 11, 16, 10, 0).toISOString(),
+        time: '10:00',
         treatment: 'Limpieza dental',
         duration: '30 min',
+        durationMinutes: 30,
+        doctor: 'Dr. García',
+        phone: '600000001',
         status: 'confirmed',
+        urgent: false,
         notes: ''
     },
     {
         id: 2,
         patientName: 'Juan Pérez',
         date: new Date(2024, 11, 16, 11, 30).toISOString(),
+        time: '11:30',
         treatment: 'Endodoncia',
         duration: '60 min',
+        durationMinutes: 60,
+        doctor: 'Dra. Rubio',
+        phone: '600000002',
         status: 'confirmed',
+        urgent: false,
         notes: ''
     },
     {
         id: 3,
         patientName: 'Ana López',
         date: new Date(2024, 11, 16, 15, 0).toISOString(),
+        time: '15:00',
         treatment: 'Revisión',
         duration: '30 min',
+        durationMinutes: 30,
+        doctor: 'Dr. López',
+        phone: '600000003',
         status: 'pending',
+        urgent: false,
         notes: ''
     }
 ];
@@ -78,9 +93,14 @@ const Agenda: React.FC = () => {
                 id: Date.now(),
                 patientName: appointmentData.patientName || '',
                 date: appointmentData.date || new Date().toISOString(),
+                time: appointmentData.time || '09:00',
                 treatment: appointmentData.treatment || '',
                 duration: appointmentData.duration || '30 min',
+                durationMinutes: appointmentData.durationMinutes || 30,
+                doctor: appointmentData.doctor || 'Dr. García',
+                phone: appointmentData.phone || '',
                 status: 'pending',
+                urgent: appointmentData.urgent || false,
                 notes: appointmentData.notes || ''
             };
             setAppointments([...appointments, newAppointment]);
