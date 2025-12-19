@@ -10,7 +10,7 @@ const MOCK_APPOINTMENTS: Appointment[] = [
         patientName: 'María García',
         date: new Date(2024, 11, 16, 10, 0).toISOString(),
         treatment: 'Limpieza dental',
-        duration: 30,
+        duration: '30 min',
         status: 'confirmed',
         notes: ''
     },
@@ -19,7 +19,7 @@ const MOCK_APPOINTMENTS: Appointment[] = [
         patientName: 'Juan Pérez',
         date: new Date(2024, 11, 16, 11, 30).toISOString(),
         treatment: 'Endodoncia',
-        duration: 60,
+        duration: '60 min',
         status: 'confirmed',
         notes: ''
     },
@@ -28,7 +28,7 @@ const MOCK_APPOINTMENTS: Appointment[] = [
         patientName: 'Ana López',
         date: new Date(2024, 11, 16, 15, 0).toISOString(),
         treatment: 'Revisión',
-        duration: 30,
+        duration: '30 min',
         status: 'pending',
         notes: ''
     }
@@ -79,7 +79,7 @@ const Agenda: React.FC = () => {
                 patientName: appointmentData.patientName || '',
                 date: appointmentData.date || new Date().toISOString(),
                 treatment: appointmentData.treatment || '',
-                duration: appointmentData.duration || 30,
+                duration: appointmentData.duration || '30 min',
                 status: 'pending',
                 notes: appointmentData.notes || ''
             };
