@@ -1,13 +1,17 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 =====================================================
 AGENTE GESDEN IA - API SERVER
 Acceso remoto vía Ngrok Tunnel
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-API Server para AGENTE GESDEN IA
-Servidor Flask que expone endpoints para interactuar con la base de datos GELITE
-y procesar comandos de lenguaje natural con IA.
+=====================================================
+
+Este servidor corre en tu PC de la clínica
+y es accesible desde internet via Ngrok.
+
+Base de datos: LOCAL (SQL Server GELITE)
+Acceso: Desde cualquier sitio via Ngrok tunnel
+IA: Google Gemini 2.0 Flash Thinking
 """
 
 import os
@@ -18,10 +22,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv()  # Carga .env desde el directorio actual
 
-from flask import Flask, render_template, request, jsonify, session
-from flask_cors import CORS
-import pyodbc
-from datetime import datetime, timedelta
 import logging
 import secrets
 import google.generativeai as genai
