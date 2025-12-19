@@ -1,0 +1,48 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# ============================================================
+# PRE-COMMIT HOOK - Protocolo SIGMA-99
+# ============================================================
+
+echo "🔍 Ejecutando validaciones pre-commit..."
+
+# 1. Prevenir commit de archivos .env
+if git diff --cached --name-only | grep -q "\.env$"; then
+  echo "❌ ERROR: Intento de commit de archivo .env detectado"
+  echo "   Los archivos .env contienen credenciales y NO deben estar en el repositorio"
+  echo ""
+  echo "   Ejecuta: git rm --cached <archivo>.env"
+  exit 1
+fi
+
+# 2. Detectar console.log en archivos staged (solo producción)
+CONSOLE_LOGS=$(git diff --cached --name-only | \
+  grep -E '\.(ts|tsx|js|jsx)$' | \
+  grep -v -E '(test|spec|__tests__|e2e)' | \
+  xargs grep -n "console\.log" 2>/dev/null || true)
+
+if [ -n "$CONSOLE_LOGS" ]; then
+  echo "⚠️  ADVERTENCIA: console.log detectado en código de producción:"
+  echo "$CONSOLE_LOGS"
+  echo ""
+  echo "   Usa el logger estructurado en su lugar:"
+  echo "   import { logger } from '@/lib/logger'"
+  echo "   logger.info('mensaje', { contexto })"
+  echo ""
+  read -p "¿Continuar con el commit de todos modos? (y/N) " -n 1 -r
+  echo
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    exit 1
+  fi
+fi
+
+# 3. Ejecutar linter de seguridad
+npm run lint:security --silent
+
+if [ $? -ne 0 ]; then
+  echo "❌ ERROR: Problemas de seguridad detectados por ESLint"
+  exit 1
+fi
+
+echo "✅ Validaciones pre-commit completadas"
