@@ -23,6 +23,12 @@ from dotenv import load_dotenv
 load_dotenv()  # Carga .env desde el directorio actual
 
 import logging
+from flask import Flask, request, jsonify, session
+from flask_cors import CORS
+import pyodbc
+from datetime import datetime, timedelta
+import secrets
+import google.generativeai as genai
 import secrets
 import google.generativeai as genai
 
