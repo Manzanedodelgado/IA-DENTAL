@@ -88,7 +88,7 @@ const Agenda: React.FC<AgendaProps> = ({ preselectedPatient, onClearPreselectedP
     };
 
     const handleOpenEdit = (apt: Appointment) => {
-        setEditingId(apt.id);
+        setEditingId(typeof apt.id === 'number' ? apt.id : parseInt(apt.id.toString()));
         setFormData({
             date: apt.date,
             time: apt.time,
@@ -365,8 +365,8 @@ const Agenda: React.FC<AgendaProps> = ({ preselectedPatient, onClearPreselectedP
                                             cursor: 'grab'
                                         }}
                                         className={`absolute left-2 right-4 p-2 rounded-lg border-l-4 transition-all group ${isDragging
-                                                ? 'opacity-50 shadow-2xl scale-105 z-30'
-                                                : 'hover:shadow-md hover:scale-[1.02]'
+                                            ? 'opacity-50 shadow-2xl scale-105 z-30'
+                                            : 'hover:shadow-md hover:scale-[1.02]'
                                             } ${apt.status === 'confirmed'
                                                 ? 'bg-gradient-to-r from-green-50 to-white border-brand-lime'
                                                 : apt.status === 'completed'
