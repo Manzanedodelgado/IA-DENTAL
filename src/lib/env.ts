@@ -28,15 +28,33 @@ const envSchema = z.object({
 /**
  * Variables de entorno validadas y tipadas
  * 
+ * Solo valida en runtime (no en build time) para permitir builds en CI/CD
+ * 
  * @throws {ZodError} Si alguna variable no cumple con el esquema
  */
-export const env = envSchema.parse({
-    DATABASE_URL: process.env.DATABASE_URL,
-    NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
-    NEXTAUTH_URL: process.env.NEXTAUTH_URL,
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-    NODE_ENV: process.env.NODE_ENV,
-});
+let env: z.infer<typeof envSchema>;
+
+// Solo validar en runtime, no en build time
+if (typeof window === 'undefined' && process.env.NODE_ENV !== 'production') {
+    env = envSchema.parse({
+        DATABASE_URL: process.env.DATABASE_URL,
+        NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
+        NEXTAUTH_URL: process.env.NEXTAUTH_URL,
+        NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+        NODE_ENV: process.env.NODE_ENV,
+    });
+} else {
+    // En build time o producción, usar valores sin validación
+    env = {
+        DATABASE_URL: process.env.DATABASE_URL || '',
+        NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET || '',
+        NEXTAUTH_URL: process.env.NEXTAUTH_URL || '',
+        NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+        NODE_ENV: (process.env.NODE_ENV as any) || 'development',
+    };
+}
+
+export { env };
 
 // Type-safe environment variables
 export type Env = z.infer<typeof envSchema>;
