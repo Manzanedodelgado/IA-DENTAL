@@ -18,15 +18,8 @@ export const authOptions: AuthOptions = {
                     throw new Error('Email y contraseña requeridos')
                 }
 
-                // HARDCODED USER PARA TESTING - JMD/190582
-                if ((credentials.email === 'JMD' || credentials.email === 'jmd') && credentials.password === '190582') {
-                    return {
-                        id: 'temp-jmd-id',
-                        email: 'jmd@rubiogarciadental.com',
-                        name: 'JMD',
-                        role: 'ADMIN',
-                    }
-                }
+                // SEGURIDAD: Bypass hardcodeado eliminado
+                // Todos los usuarios deben autenticarse contra la base de datos
 
                 // Buscar por email o username en BD
                 const user = await prisma.user.findFirst({

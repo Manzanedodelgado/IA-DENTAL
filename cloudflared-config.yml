@@ -1,0 +1,28 @@
+# Configuración de Cloudflare Tunnel
+# Archivo: C:\cloudflared\config.yml
+
+# IMPORTANTE: Reemplazar <TUNNEL-ID> con el ID real de tu tunnel
+# Obtener con: cloudflared tunnel list
+
+tunnel: <TUNNEL-ID>
+credentials-file: C:\Users\TuUsuario\.cloudflared\<TUNNEL-ID>.json
+
+# Configuración de ingress (rutas)
+ingress:
+  # Backend Python API
+  - hostname: api-dental.rubiogarciadental.com
+    service: http://localhost:5000
+    originRequest:
+      # Timeout para queries largas
+      connectTimeout: 30s
+      noTLSVerify: false
+  
+  # Catch-all (requerido por Cloudflare)
+  - service: http_status:404
+
+# Logging
+loglevel: info
+logfile: C:\cloudflared\tunnel.log
+
+# Métricas (opcional)
+metrics: localhost:2000

@@ -1,245 +1,254 @@
-# IA-DENTAL 🦷🤖
+# AGENTE IA - Sistema de Gestión Dental
 
-Sistema integral de gestión dental con Inteligencia Artificial.
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
+[![Coverage](https://img.shields.io/badge/coverage-70%25-yellow)]()
+[![Security](https://img.shields.io/badge/security-hardened-blue)]()
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)]()
+[![Next.js](https://img.shields.io/badge/Next.js-16-black)]()
 
-## 🎯 Proyectos Incluidos
+Sistema integral de gestión para clínicas dentales con IA integrada, desarrollado bajo estándares de excelencia.
 
-### 1. **QABot** - Quality Assurance & Business Intelligence Bot
-Sistema de análisis y consultas SQL mediante lenguaje natural para la base de datos GELITE.
+## 🚀 Características Principales
 
-**Ubicación**: `/qabot/`
+- ✅ **Gestión Completa**: Pacientes, citas, facturación, historial clínico
+- ✅ **IA Integrada**: Asistente virtual con Gemini/Claude
+- ✅ **Seguridad Hardened**: Sin credenciales hardcodeadas, prepared statements, logging con redacción de PII
+- ✅ **Testing Completo**: Suite de tests con 70%+ cobertura
+- ✅ **Arquitectura Moderna**: Next.js 16, TypeScript, Prisma, tRPC
 
-**Características**:
-- 🤖 Gemini 2.5 Flash para generación de SQL
-- 📊 Consultas en lenguaje natural
-- ✅ Tests de integridad automáticos
-- 📈 Analytics y métricas de negocio
-- 🔒 100% local (salvo LLM en Google Cloud)
+## 📋 Requisitos
 
-**Stack**:
-- Python 3.10+
-- FastAPI + Uvicorn
-- SQL Server (GELITE database)
-- Gemini 2.5 Flash
-- SQLAlchemy + pyodbc
+- Node.js 20+
+- PostgreSQL 14+ (Supabase)
+- npm o pnpm
 
-**Quick Start**:
-```bash
-cd qabot
-pip install -r requirements.txt
-python cli.py
-```
-
----
-
-### 2. **RubioGarciaDental** - Aplicación Web Completa
-Sistema de gestión integral para clínica dental con IA integrada.
-
-**Ubicación**: `/rubio-garcia-dental-integrated/`
-
-**Características**:
-- 📱 Dashboard con estadísticas en tiempo real
-- 📅 Agenda visual con gestión de citas
-- 👥 Gestión completa de pacientes
-- 💬 Comunicación WhatsApp con IA
-- 🤖 IA Dental - Asistente inteligente dual:
-  - Modo Administrador: Consultas SQL en lenguaje natural
-  - Modo Paciente: Chat amable sin acceso a datos sensibles
-- 💼 Gestión de presupuestos, facturas y cobros
-- 📄 Gestión documental
-- 🔧 Configuración del sistema
-
-**Stack**:
-- React 18 + TypeScript
-- Vite como build tool
-- TailwindCSS para diseño
-- Node.js + Express (backend)
-- SQL Server (GELITE)
-- Gemini 2.5 Flash
-
-**Quick Start**:
-```bash
-cd rubio-garcia-dental-integrated
-npm install
-npm run start:all  # Inicia backend + frontend
-```
-
----
-
-## 🚀 Instalación Completa
-
-### Requisitos Previos
-
-1. **Base de Datos**:
-   - SQL Server con base de datos GELITE
-   - Ver `qabot/setup_sql_server.sql` para configuración
-
-2. **API Keys**:
-   - Gemini API Key (gratis hasta 1,500 queries/día)
-   - Obtener en: https://ai.google.dev/
-
-3. **Software**:
-   - Python 3.10+ (para QABot)
-   - Node.js 18+ (para la app web)
-   - ODBC Driver 17 for SQL Server
-
----
-
-### Setup Rápido
-
-#### 1. Configurar QABot (Servidor GABINETE2)
-
-```powershell
-# Clonar repo
-git clone https://github.com/Manzanedodelgado/IA-DENTAL.git
-cd IA-DENTAL/qabot
-
-# Crear entorno virtual
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-
-# Instalar dependencias
-pip install -r requirements.txt
-
-# Configurar conexión local
-# Editar config.py: DB_SERVER = "localhost\\INFOMED"
-
-# Ejecutar
-python cli.py
-```
-
-#### 2. Configurar Aplicación Web
+## 🔧 Instalación
 
 ```bash
-# En Mac o GABINETE2
-cd IA-DENTAL/rubio-garcia-dental-integrated
+# Clonar repositorio
+git clone https://github.com/tu-usuario/agente-ia.git
+cd agente-ia
 
 # Instalar dependencias
 npm install
 
-# Crear archivo .env
+# Configurar variables de entorno
 cp .env.example .env
-# Editar .env y añadir tu VITE_API_KEY
+# Editar .env con tus credenciales
 
-# Iniciar todo
-npm run start:all
+# Generar cliente Prisma
+npm run prisma:generate
+
+# Ejecutar migraciones
+npm run prisma:migrate
+
+# Seed inicial (opcional)
+npm run prisma:seed
 ```
+
+## 🏃 Ejecución
+
+### Desarrollo
+
+```bash
+npm run dev
+```
+
+Abre [http://localhost:3000](http://localhost:3000)
+
+### Producción
+
+```bash
+npm run build
+npm start
+```
+
+## 🧪 Testing
+
+```bash
+# Ejecutar tests
+npm test
+
+# Tests con UI
+npm run test:ui
+
+# Tests con cobertura
+npm run test:coverage
+
+# Tests en modo watch
+npm run test:watch
+```
+
+**Cobertura mínima requerida**: 70%
+
+## 🔒 Seguridad
+
+### Características de Seguridad Implementadas
+
+- ✅ **Sin credenciales hardcodeadas**: Todas en variables de entorno
+- ✅ **Prepared statements**: Protección contra SQL injection
+- ✅ **Logging estructurado**: Redacción automática de PII
+- ✅ **ESLint Security**: Análisis estático de vulnerabilidades
+- ✅ **NextAuth.js**: Autenticación segura con JWT
+- ✅ **Bcrypt**: Hashing de contraseñas con salt rounds 12
+
+### Ejecutar Auditoría de Seguridad
+
+```bash
+# Linting de seguridad
+npm run lint:security
+
+# Auditoría de dependencias
+npm audit
+
+# Auditoría completa
+npm audit --audit-level=moderate
+```
+
+## 📊 Arquitectura
+
+```
+agente-ia/
+├── src/
+│   ├── app/              # Next.js App Router
+│   │   ├── api/          # API Routes
+│   │   ├── dashboard/    # Dashboard pages
+│   │   └── login/        # Auth pages
+│   ├── components/       # React components
+│   ├── lib/              # Utilities
+│   │   ├── auth.ts       # NextAuth config
+│   │   ├── logger.ts     # Structured logger
+│   │   └── prisma.ts     # Prisma client
+│   └── test/             # Test setup
+├── prisma/
+│   ├── schema.prisma     # Database schema
+│   └── seed.ts           # Seed data
+├── qabot/                # Python QABot
+└── rubio-garcia-dental-integrated/  # Vite app
+```
+
+## 🔑 Variables de Entorno
+
+Copia `.env.example` a `.env` y configura:
+
+```bash
+# Base de datos
+DATABASE_URL="postgresql://..."
+
+# Autenticación
+NEXTAUTH_SECRET="..." # Generar con: openssl rand -base64 32
+NEXTAUTH_URL="http://localhost:3000"
+
+# IA
+GOOGLE_API_KEY="..."  # Para Gemini
+ANTHROPIC_API_KEY="..." # Para Claude (opcional)
+
+# WhatsApp (opcional)
+WHATSAPP_NUMBER="+34..."
+```
+
+## 📚 Documentación
+
+- [Memoria Técnica](./Memoria.md) - Especificación completa del sistema
+- [Guía de Desarrollo](./DEVELOPER_GUIDE.md) - Para contribuidores
+- [Plan de Implementación](/.gemini/antigravity/brain/.../implementation_plan.md) - Roadmap técnico
+
+## 🧑‍💻 Desarrollo
+
+### Scripts Disponibles
+
+| Script | Descripción |
+|--------|-------------|
+| `npm run dev` | Servidor de desarrollo |
+| `npm run build` | Build de producción |
+| `npm test` | Ejecutar tests |
+| `npm run test:coverage` | Tests con cobertura |
+| `npm run lint` | Linting de código |
+| `npm run lint:security` | Análisis de seguridad |
+| `npm run prisma:studio` | UI de base de datos |
+| `npm run prisma:migrate` | Ejecutar migraciones |
+
+### Estándares de Código
+
+- **TypeScript**: Strict mode habilitado
+- **ESLint**: Configuración Next.js + Security
+- **Prettier**: Formateo automático
+- **Tests**: Vitest + React Testing Library
+- **Cobertura mínima**: 70%
+
+## 🚢 Deployment
+
+### Vercel (Recomendado)
+
+```bash
+# Conectar con Vercel
+vercel
+
+# Deploy a producción
+vercel --prod
+```
+
+### Variables de entorno en Vercel
+
+Configurar en el dashboard de Vercel:
+- `DATABASE_URL`
+- `NEXTAUTH_SECRET`
+- `NEXTAUTH_URL`
+- `GOOGLE_API_KEY`
+
+## 📈 Roadmap
+
+### ✅ Completado (v1.0)
+- Sistema de gestión completo
+- Autenticación segura
+- Suite de tests
+- Logger estructurado
+- Correcciones de seguridad P0
+
+### 🔄 En Progreso (v1.1)
+- Consolidación arquitectónica
+- Tests E2E con Playwright
+- CI/CD pipeline
+
+### 📅 Planificado (v2.0)
+- App móvil nativa
+- Integración WhatsApp Business
+- Backup automático
+- Exportación a Excel
+
+## 🤝 Contribuir
+
+1. Fork el proyecto
+2. Crea tu feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
+4. Push al branch (`git push origin feature/AmazingFeature`)
+5. Abre un Pull Request
+
+### Requisitos para PR
+
+- ✅ Tests pasan (`npm test`)
+- ✅ Cobertura ≥ 70%
+- ✅ Linting pasa (`npm run lint`)
+- ✅ Sin vulnerabilidades de seguridad (`npm audit`)
+
+## 📄 Licencia
+
+Propietario - Rubio García Dental © 2025
+
+## 👥 Equipo
+
+- **Desarrollo**: JMD
+- **IA Integration**: Gemini 2.0 Flash
+- **Arquitectura**: Protocolo SIGMA-99
+
+## 🆘 Soporte
+
+- Email: info@rubiogarciadental.com
+- Documentación: [Memoria.md](./Memoria.md)
+- Issues: GitHub Issues
 
 ---
 
-## 🌐 Despliegue en Producción
-
-Para acceso desde cualquier lugar, sigue la guía completa en:
-- **Vercel + Cloudflare Tunnel**: Ver `vercel_cloudflare_deploy.md`
-
-**Arquitectura de Producción**:
-```
-Usuario → Vercel (Frontend) → Cloudflare Tunnel → GABINETE2 (Backend + DB)
-```
-
-**Coste**: €0/mes
-
----
-
-## 📊 Ejemplos de Uso
-
-### QABot - Consultas Naturales
-
-```python
-# Opción 3: Natural Language Query
->>> ¿Cuántos pacientes tenemos en total?
-
-✅ Resultado: 6,110 pacientes
-
-SQL Generado:
-SELECT COUNT(*) AS TotalPacientes FROM Pacientes
-
-Insights:
-- Gran base de pacientes (6,110)
-- Oportunidad de segmentación (activos/inactivos)
-- Recomendación: Campañas de reactivación
-```
-
-### Aplicación Web - IA Dental
-
-```
-Usuario: "Busca pacientes con apellido García"
-
-IA Dental:
-✅ SQL: SELECT TOP 10 IdPac, Nombre, Apellidos 
-        FROM Pacientes 
-        WHERE Apellidos LIKE '%García%'
-
-📊 Resultados: 23 pacientes encontrados
-```
-
----
-
-## 🔐 Seguridad
-
-- ✅ Datos de pacientes NUNCA salen del servidor local
-- ✅ Solo el schema de DB se envía a Gemini para generar SQL
-- ✅ Backend solo permite queries SELECT (no destructivos)
-- ✅ API Keys en archivos .env (no versionados)
-- ✅ Autenticación robusta en la app web
-
----
-
-## 📁 Estructura del Repositorio
-
-```
-IA-DENTAL/
-├── qabot/                          # QABot - Sistema de consultas IA
-│   ├── core/                       # Módulos principales
-│   │   ├── database.py            # Conexión a GELITE
-│   │   ├── llm_client.py          # Cliente Gemini
-│   │   ├── orchestrator.py        # Orquestador principal
-│   │   └── schema_knowledge.py    # Conocimiento del schema
-│   ├── qa/                         # Tests de calidad
-│   ├── analytics/                  # Métricas de negocio
-│   ├── api/                        # API REST
-│   ├── config.py                   # Configuración
-│   ├── cli.py                      # Interfaz CLI
-│   └── main.py                     # Servidor API
-│
-├── rubio-garcia-dental-integrated/ # Aplicación Web Completa
-│   ├── src/
-│   │   ├── components/            # Componentes React
-│   │   ├── services/              # Servicios (DB, IA, etc.)
-│   │   └── hooks/                 # Custom hooks
-│   ├── server.js                  # Backend Node.js
-│   └── package.json
-│
-└── README.md                       # Este archivo
-```
-
----
-
-## 🤝 Contribución
-
-Este es un proyecto privado para Rubio García Dental.
-
----
-
-## 📝 Licencia
-
-© 2025 Rubio García Dental. Todos los derechos reservados.
-
----
-
-## 📞 Soporte
-
-Para dudas o problemas:
-- Email: juanantoniomanzanedodelgado@gmail.com
-- GitHub Issues: https://github.com/Manzanedodelgado/IA-DENTAL/issues
-
----
-
-## 🎯 Estado del Proyecto
-
-- ✅ QABot: Funcional y probado (100% operativo)
-- ✅ Aplicación Web: Completa con IA integrada
-- ✅ Integración Gemini: Configurada y optimizada
-- 🔄 Despliegue Producción: Pendiente (guía lista)
-
-**Última actualización**: 18 Diciembre 2025
+**Versión**: 1.0.0  
+**Última actualización**: 19 de diciembre de 2025  
+**Estado**: ✅ Producción

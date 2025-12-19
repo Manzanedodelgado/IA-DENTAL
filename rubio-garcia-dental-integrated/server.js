@@ -1,23 +1,36 @@
 import express from 'express';
 import sql from 'mssql';
 import cors from 'cors';
+import dotenv from 'dotenv';
+
+// Cargar variables de entorno
+dotenv.config();
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 // Configuración de conexión a GELITE (SQL Server)
+// SEGURIDAD: Credenciales movidas a variables de entorno
 const dbConfig = {
-    user: 'RUBIOGARCIADENTAL',
-    password: '666666',
-    server: 'GABINETE2',
-    database: 'GELITE',
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    server: process.env.DB_SERVER,
+    database: process.env.DB_NAME,
     options: {
         encrypt: false,
         trustServerCertificate: true,
-        instanceName: 'INFOMED',
+        instanceName: process.env.DB_INSTANCE || 'INFOMED',
         enableArithAbort: true
     }
 };
+
+// Validar que las credenciales estén configuradas
+if (!dbConfig.user || !dbConfig.password || !dbConfig.server || !dbConfig.database) {
+    console.error('❌ ERROR: Faltan variables de entorno de base de datos');
+    console.error('Por favor, copia .env.example a .env y configura las credenciales');
+    process.exit(1);
+}
+
 
 // Configuración CORS para permitir acceso desde múltiples orígenes
 app.use(cors({
@@ -221,10 +234,16 @@ app.get('/api/stats/dashboard', async (req, res) => {
 
         const today = new Date().toISOString().split('T')[0];
 
+        // SEGURIDAD: Usar prepared statements en lugar de interpolación
         const [citasHoy, pacientesActivos, citasPendientes] = await Promise.all([
-            pool.request().query(`SELECT COUNT(*) as count FROM DCitas WHERE CONVERT(date, Fecha) = '${today}'`),
-            pool.request().query(`SELECT COUNT(*) as count FROM Pacientes WHERE Inactivo = 0`),
-            pool.request().query(`SELECT COUNT(*) as count FROM DCitas WHERE CONVERT(date, Fecha) >= '${today}'`)
+            pool.request()
+                .input('today', sql.Date, today)
+                .query(`SELECT COUNT(*) as count FROM DCitas WHERE CONVERT(date, Fecha) = @today`),
+            pool.request()
+                .query(`SELECT COUNT(*) as count FROM Pacientes WHERE Inactivo = 0`),
+            pool.request()
+                .input('today', sql.Date, today)
+                .query(`SELECT COUNT(*) as count FROM DCitas WHERE CONVERT(date, Fecha) >= @today`)
         ]);
 
         res.json({

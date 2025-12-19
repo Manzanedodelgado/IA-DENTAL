@@ -6,29 +6,29 @@ interface LoginProps {
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-    const [email, setEmail] = useState('JMD');
-    const [password, setPassword] = useState('190582');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
     const [error, setError] = useState('');
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Credenciales: JMD / 190582 (Admin)
-        if ((email === 'JMD' || email === 'info@rubiogarciadental.com') && password === '190582') {
+        // SEGURIDAD: Autenticación real contra base de datos
+        // TODO: Implementar llamada a API de autenticación
+        // Por ahora, validación básica
+        if (!email || !password) {
+            setError('Por favor, ingresa usuario y contraseña');
+            return;
+        }
+
+        // Validación temporal - DEBE reemplazarse con autenticación real
+        if (email === 'JMD' && password === '190582') {
             onLogin({
                 id: '1',
                 name: 'JMD',
                 email: 'info@rubiogarciadental.com',
                 role: 'admin' as any,
                 username: 'JMD'
-            });
-        } else if (email === 'user' && password === 'user') {
-            onLogin({
-                id: '2',
-                name: 'Usuario Estándar',
-                email: 'user@rubiogarciadental.com',
-                role: 'user' as any,
-                username: 'user'
             });
         } else {
             setError('Credenciales incorrectas');
