@@ -126,7 +126,7 @@ const Agenda: React.FC<AgendaProps> = ({ preselectedPatient, onClearPreselectedP
         if (editingId !== null) {
             // Edit existing
             setAppointments(prev => prev.map(apt =>
-                apt.id === editingId
+                (typeof apt.id === 'number' ? apt.id : parseInt(apt.id.toString())) === editingId
                     ? { ...apt, ...formData, duration: `${formData.durationMinutes} min` }
                     : apt
             ));
@@ -146,7 +146,7 @@ const Agenda: React.FC<AgendaProps> = ({ preselectedPatient, onClearPreselectedP
 
     const handleDelete = () => {
         if (editingId !== null) {
-            setAppointments(prev => prev.filter(apt => apt.id !== editingId));
+            setAppointments(prev => prev.filter(apt => (typeof apt.id === 'number' ? apt.id : parseInt(apt.id.toString())) !== editingId));
             setIsModalOpen(false);
         }
     };
@@ -154,7 +154,7 @@ const Agenda: React.FC<AgendaProps> = ({ preselectedPatient, onClearPreselectedP
     // ============ DRAG & DROP HANDLERS ============
 
     const handleDragStart = (e: React.DragEvent<HTMLDivElement>, apt: Appointment) => {
-        setDraggingId(apt.id);
+        setDraggingId(typeof apt.id === 'number' ? apt.id : parseInt(apt.id.toString()));
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', apt.id.toString());
 
@@ -207,7 +207,7 @@ const Agenda: React.FC<AgendaProps> = ({ preselectedPatient, onClearPreselectedP
 
             // Update appointment time
             setAppointments(prev => prev.map(apt =>
-                apt.id === aptId ? { ...apt, time: newTime } : apt
+                (typeof apt.id === 'number' ? apt.id : parseInt(apt.id.toString())) === aptId ? { ...apt, time: newTime } : apt
             ));
         }
 
@@ -350,7 +350,7 @@ const Agenda: React.FC<AgendaProps> = ({ preselectedPatient, onClearPreselectedP
                                 const [h, m] = apt.time.split(':').map(Number);
                                 const top = ((h - START_HOUR) * PIXELS_PER_HOUR) + ((m / 60) * PIXELS_PER_HOUR);
                                 const height = (apt.durationMinutes / 60) * PIXELS_PER_HOUR;
-                                const isDragging = draggingId === apt.id;
+                                const isDragging = draggingId === (typeof apt.id === 'number' ? apt.id : parseInt(apt.id.toString()));
 
                                 return (
                                     <div
