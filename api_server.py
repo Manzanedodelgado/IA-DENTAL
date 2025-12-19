@@ -20,15 +20,26 @@ from pathlib import Path
 
 # CRÍTICO: Cargar variables de entorno ANTES de cualquier otra cosa
 from dotenv import load_dotenv
-load_dotenv()  # Carga .env desde el directorio actual
+
+# Obtener directorio del script
+BASE_DIR = Path(__file__).resolve().parent
+ENV_PATH = BASE_DIR / '.env'
+
+# Cargar .env con ruta explícita
+load_dotenv(dotenv_path=ENV_PATH, override=True)
+
+# Debug: Verificar carga
+print(f"📂 Buscando .env en: {ENV_PATH}")
+print(f"📂 Archivo existe: {ENV_PATH.exists()}")
+if ENV_PATH.exists():
+    with open(ENV_PATH, 'r', encoding='utf-8') as f:
+        print(f"📄 Contenido .env:\n{f.read()}")
 
 import logging
 from flask import Flask, request, jsonify, session
 from flask_cors import CORS
 import pyodbc
 from datetime import datetime, timedelta
-import secrets
-import google.generativeai as genai
 import secrets
 import google.generativeai as genai
 
@@ -47,6 +58,12 @@ class Config:
     
     # Google Gemini API (GRATIS)
     GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY", "")
+    
+    # Debug
+    print(f"🔑 GOOGLE_API_KEY leída: {GOOGLE_API_KEY[:20]}..." if GOOGLE_API_KEY else "❌ GOOGLE_API_KEY vacía")
+    
+    # Seguridad
+    SECRET_KEY = secrets.token_hex(16)
     
     # Seguridad
     SECRET_KEY = secrets.token_hex(16)
