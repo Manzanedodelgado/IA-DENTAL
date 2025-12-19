@@ -16,25 +16,13 @@ if git diff --cached --name-only | grep -q "\.env$"; then
   exit 1
 fi
 
-# 2. Detectar console.log en archivos staged (solo producción)
-CONSOLE_LOGS=$(git diff --cached --name-only | \
-  grep -E '\.(ts|tsx|js|jsx)$' | \
-  grep -v -E '(test|spec|__tests__|e2e)' | \
-  xargs grep -n "console\.log" 2>/dev/null || true)
+# 2. Ejecutar lint-staged (linting y formatting automático)
+npx lint-staged
 
-if [ -n "$CONSOLE_LOGS" ]; then
-  echo "⚠️  ADVERTENCIA: console.log detectado en código de producción:"
-  echo "$CONSOLE_LOGS"
-  echo ""
-  echo "   Usa el logger estructurado en su lugar:"
-  echo "   import { logger } from '@/lib/logger'"
-  echo "   logger.info('mensaje', { contexto })"
-  echo ""
-  read -p "¿Continuar con el commit de todos modos? (y/N) " -n 1 -r
-  echo
-  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    exit 1
-  fi
+if [ $? -ne 0 ]; then
+  echo "❌ ERROR: Lint-staged falló"
+  echo "   Corrige los errores de linting antes de commitear"
+  exit 1
 fi
 
 # 3. Ejecutar linter de seguridad
