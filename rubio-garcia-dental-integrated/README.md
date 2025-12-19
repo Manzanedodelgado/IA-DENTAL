@@ -1,4 +1,4 @@
-# Rubio García Dental + Alveolo IA
+# Rubio García Dental + IA Dental
 
 Sistema de Gestión Integral para Clínica Dental con Inteligencia Artificial.
 
@@ -8,7 +8,7 @@ Sistema de Gestión Integral para Clínica Dental con Inteligencia Artificial.
 - **Agenda** visual con gestión de citas
 - **Pacientes** con ficha completa y historial clínico
 - **Comunicación** WhatsApp con respuesta automática IA
-- **Alveolo IA** - Asistente inteligente con dos modos:
+- **IA Dental** - Asistente inteligente con dos modos:
   - **Modo Administrador**: Consultas SQL en lenguaje natural
   - **Modo Paciente**: Chat amable sin acceso a datos sensibles
 - **Chat Flotante** para acceso rápido del administrador
@@ -22,8 +22,8 @@ rubio-garcia-dental-integrated/
 ├── src/
 │   ├── App.tsx         # Aplicación principal
 │   ├── components/     # Componentes React
-│   │   ├── Alveolo.tsx           # Panel completo de IA
-│   │   ├── AlveoloFloatChat.tsx  # Chat popup flotante
+│   │   ├── IADental.tsx           # Panel completo de IA
+│   │   ├── IADentalFloatChat.tsx  # Chat popup flotante
 │   │   ├── Dashboard.tsx
 │   │   ├── Agenda.tsx
 │   │   ├── Patients.tsx
@@ -73,8 +73,8 @@ VITE_API_KEY=tu_api_key_de_gemini
 
 1. **Login**: JMD / 190582 (Admin)
 2. **Dashboard**: Vista general con stats de GELITE
-3. **Alveolo (Sidebar)**: Chat completo con modos Admin/Paciente
-4. **Chat Flotante**: Botón "Alveolo Admin" en esquina inferior derecha
+3. **IA Dental (Sidebar)**: Chat completo con modos Admin/Paciente
+4. **Chat Flotante**: Botón "IA Dental Admin" en esquina inferior derecha
 
 ## 📡 Endpoints API
 
@@ -87,7 +87,7 @@ VITE_API_KEY=tu_api_key_de_gemini
 | GET | /api/patients/:id | Ficha de paciente |
 | GET | /api/stats/dashboard | Estadísticas |
 
-## 🤖 Alveolo IA
+## 🤖 IA Dental
 
 ### Ejemplos de consultas (Modo Admin):
 - "¿Cuántos pacientes tenemos registrados?"
@@ -96,8 +96,8 @@ VITE_API_KEY=tu_api_key_de_gemini
 - "¿Cuáles son los tratamientos más realizados?"
 
 ### Modo Paciente:
-Simula cómo respondería Alveolo a un paciente real, sin revelar información de base de datos.
+Simula cómo respondería IA Dental a un paciente real, sin revelar información de base de datos.
 
 ---
 
-© 2025 Rubio García Dental + Alveolo IA
+© 2025 Rubio García Dental + IA Dental

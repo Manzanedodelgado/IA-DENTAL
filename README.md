@@ -42,7 +42,7 @@ Sistema de gestión integral para clínica dental con IA integrada.
 - 📅 Agenda visual con gestión de citas
 - 👥 Gestión completa de pacientes
 - 💬 Comunicación WhatsApp con IA
-- 🤖 Alveolo IA - Asistente inteligente dual:
+- 🤖 IA Dental - Asistente inteligente dual:
   - Modo Administrador: Consultas SQL en lenguaje natural
   - Modo Paciente: Chat amable sin acceso a datos sensibles
 - 💼 Gestión de presupuestos, facturas y cobros

@@ -110,8 +110,8 @@ src/
 │   ├── Communication.tsx # Chat estilo WhatsApp
 │   ├── Documents.tsx    # Gestor de documentos
 │   ├── Management.tsx   # Gestión y facturación
-│   ├── Alveolo.tsx      # Universo IA
-│   ├── AlveoloFloatChat.tsx # Chat flotante
+│   ├── IADental.tsx      # Sistema IA
+│   ├── IADentalFloatChat.tsx # Chat flotante
 │   └── Config.tsx       # Configuración (solo admin)
 └── services/
     ├── databaseService.ts   # Conexión a backend/SQL
@@ -343,4 +343,4 @@ npm run preview
 
 ---
 
-© 2025 Rubio García Dental + Alveolo IA
+© 2025 Rubio García Dental + IA Dental

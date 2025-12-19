@@ -19,7 +19,18 @@ const dbConfig = {
     }
 };
 
-app.use(cors());
+// Configuración CORS para permitir acceso desde múltiples orígenes
+app.use(cors({
+    origin: [
+        'http://localhost:5173',              // Desarrollo local
+        'http://localhost:3000',              // Desarrollo alternativo
+        'https://*.vercel.app',               // Previews de Vercel
+        'https://app.rubiogarciadental.com'   // Producción (ajusta según tu dominio)
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // Health check
@@ -228,6 +239,6 @@ app.get('/api/stats/dashboard', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`🚀 Servidor Alveolo Backend escuchando en http://localhost:${PORT}`);
+    console.log(`🚀 Servidor IA Dental Backend escuchando en http://localhost:${PORT}`);
     console.log(`📡 Conectando a ${dbConfig.server}\\${dbConfig.options.instanceName} -> BD: ${dbConfig.database}`);
 });
