@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 
-console.log("🚀 Iniciando Rubio García Dental + Alveolo IA...");
+console.log("🚀 Iniciando Rubio García Dental + IA Dental...");
 console.log("================================================");
 
 // Iniciar Backend (Puerto 3001)
