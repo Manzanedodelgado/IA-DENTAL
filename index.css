@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        --background: 210 20% 96%;
+        --foreground: 222.2 47% 11%;
+        --radius: 0.5rem;
+        --primary-navy: #002855;
+        --accent-teal: #0056b3;
+    }
+
+    body {
+        @apply bg-clinical-soft dark:bg-slate-950 text-slate-900 dark:text-slate-50 antialiased font-sans overflow-hidden h-screen w-full;
+        font-size: 13px;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+        @apply tracking-tight font-semibold;
+    }
+}
+
+@layer components {
+    .glass-panel {
+        @apply bg-white/90 backdrop-blur-sm border border-slate-200 shadow-sm;
+    }
+
+    .premium-card {
+        @apply bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 transition-all hover:border-slate-300;
+    }
+}

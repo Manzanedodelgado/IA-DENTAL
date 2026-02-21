@@ -1,0 +1,130 @@
+
+export type Area =
+    | 'CLÍNICA'
+    | 'Agenda'
+    | 'Pacientes'
+    | 'IA & Automatización'
+    | 'Gestoría'
+    | 'Inventario'
+    | 'Whatsapp'
+    | 'Configuración';
+
+export interface SubNavItem {
+    name: string;
+    icon: string;
+}
+
+export interface MenuItem {
+    name: Area;
+    icon: string;
+    title?: string;
+    children?: SubNavItem[];
+}
+
+// --- PACIENTES & CLÍNICA ---
+export interface SOAPNote {
+    id: string;
+    fecha: string;
+    doctor: string;
+    especialidad: string;
+    subjetivo: string;
+    objetivo: string;
+    analisis: string;
+    plan: string;
+    firmada: boolean;
+    timestamp: string;
+    eva: number;
+    alertasDetectadas: string[];
+}
+
+export interface Paciente {
+    id: string;
+    nombre: string;
+    apellidos: string;
+    dni: string;
+    telefono: string;
+    fechaNacimiento: string;
+    tutor?: string;
+    alergias: string[];
+    medicacionActual?: string;
+    deuda: boolean;
+    historial: SOAPNote[];
+    consentimientosFirmados: boolean;
+}
+
+// --- 1.2 AGENDA SEMÁNTICA ---
+export type TratamientoCategoria =
+    | 'Cirugía'   // Rojo: Alta rentabilidad/tensión
+    | 'Higiene'   // Verde: Mantenimiento
+    | 'Ortodoncia'// Azul: Volumen masivo
+    | 'Diagnostico' // Gris: Entrada flujo caja
+    | 'Urgencia'  // Amarillo: No planificada
+    | 'Protesis'; // Morado: Laboratorio
+
+export type EstadoCita =
+    | 'planificada' // Borde punteado
+    | 'confirmada'  // Borde sólido
+    | 'espera'      // Parpadeo suave
+    | 'gabinete'    // Saturación aumentada
+    | 'finalizada'  // Semitransparente
+    | 'fallada'     // No-Show
+    | 'bloqueo_bio'; // Trama rayada (1.5)
+
+export interface Cita {
+    id: string;
+    gabinete: string;
+    pacienteId: string;
+    nombrePaciente: string;
+    horaInicio: string; // HH:MM
+    duracionMinutos: number;
+    tratamiento: string;
+    categoria: TratamientoCategoria;
+    estado: EstadoCita;
+    doctor: string;
+
+    // 1.3 HUD ALERTAS
+    alertasMedicas: string[]; // Prioridad Roja (Glow)
+    alertasLegales: string[]; // Prioridad Amarilla (Interlock)
+    alertasFinancieras: boolean; // Prioridad Naranja
+
+    // 1.5 BIOSEGURIDAD
+    esPadreDesinfeccion?: boolean; // Si genera bloqueo hijo
+
+    // 1.2.E ICONOGRAFÍA OVERLAY
+    presupuestoPendiente?: boolean; // Icono $
+    pruebasPendientes?: boolean; // Icono Rayos X
+    trabajoLaboratorio?: boolean; // Icono Matraz
+}
+
+// --- 5.0 INVENTARIO & TRAZABILIDAD ---
+export type EstadoLote = 'OK' | 'Caducidad_Proxima' | 'Caducado' | 'Cuarentena_Sanitaria';
+
+export interface Lote {
+    batchId: string;
+    loteFabricante: string;
+    fechaCaducidad: string;
+    cantidad: number;
+    estado: EstadoLote;
+    ubicacion: string;
+    temperaturaAlerta?: boolean;
+}
+
+export interface ItemInventario {
+    id: string;
+    nombre: string;
+    sku: string;
+    categoria: 'Implante' | 'Desechable' | 'Instrumental';
+    stockFisico: number;
+    stockVirtual: number; // Reservado por agenda
+    minimoReorden: number;
+    lotes: Lote[];
+}
+
+// --- 1.9 BI & KPIS ---
+export interface KPI {
+    label: string;
+    valor: string | number;
+    unidad: string;
+    trend: number;
+    target: number;
+}

@@ -1,0 +1,28 @@
+https://github.com/Manzanedodelgado/IA-DENTAL.git
+postgresql://postgres:[YOUR-PASSWORD]@db.ltfstsjfybpbtiakopor.supabase.co:5432/postgres
+host:
+aws-1-eu-central-1.pooler.supabase.com
+
+port:
+5432
+
+database:
+postgres
+
+user:
+postgres.ltfstsjfybpbtiakopor
+
+pool_mode:
+session
+
+Project URL
+https://ltfstsjfybpbtiakopor.supabase.co
+
+
+Publishable Key
+sb_publishable_1TgiwqD4gHIv0-jAhZnCGw_WdJ4EtF1
+
+
+Anon Key (Legacy)
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx0ZnN0c2pmeWJwYnRpYWtvcG9yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyMDA1NDMsImV4cCI6MjA4Njc3NjU0M30.uvq4_iijnyednyezO8A7u_vhJDj7nn1bTebi2pflLR0
+
