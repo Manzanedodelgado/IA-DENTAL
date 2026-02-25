@@ -11,8 +11,11 @@ import IAAutomatizacion from './views/IAAutomatizacion';
 import Gestoria from './views/Gestoria';
 import Whatsapp from './views/Whatsapp';
 import Inventario from './views/Inventario';
+import Login from './views/Login';
+import { useAuth } from './context/AuthContext';
 
 const App: React.FC = () => {
+    const { isAuthenticated, loading } = useAuth();
     const [activeArea, setActiveArea] = useState<Area>('Agenda');
     const [activeSubArea, setActiveSubArea] = useState<string>('Jornada de Hoy');
     const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -51,6 +54,18 @@ const App: React.FC = () => {
         }
     };
 
+    if (loading) {
+        return (
+            <div className="h-screen w-full flex items-center justify-center bg-clinical-soft">
+                <div className="w-12 h-12 border-4 border-[#002855]/20 border-t-[#002855] rounded-full animate-spin" />
+            </div>
+        );
+    }
+
+    if (!isAuthenticated) {
+        return <Login />;
+    }
+
     const currentMenuItem = navigationItems.find(item => item.name === activeArea);
     const showSidebar = !!currentMenuItem?.children;
 
@@ -64,8 +79,6 @@ const App: React.FC = () => {
             )}
 
             <Header activeArea={activeArea} onNavigate={handleNavigation} />
-
-            {/* Patient Status Bar - Floating Glassmorphism */}
 
             <div className="flex flex-1 overflow-hidden">
                 {showSidebar && (

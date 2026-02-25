@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 
 const ConfiguracionAgenda: React.FC = () => {
     const [doctorActivo, setDoctorActivo] = useState('Dr. Pablo García');
-    
-    const doctores = [
+    const [editarId, setEditarId] = useState<number | null>(null);
+    const [editForm, setEditForm] = useState({ nombre: '', especialidad: '' });
+
+    const [doctores, setDoctores] = useState([
         { id: 1, nombre: 'Dr. Pablo García', especialidad: 'Implantología', color: '#003a70' },
         { id: 2, nombre: 'Dra. Elena Rubio', especialidad: 'Ortodoncia', color: '#009fe3' },
         { id: 3, nombre: 'Dra. Sofía Marín', especialidad: 'Estética', color: '#10b981' }
-    ];
+    ]);
 
     const horariosBase = [
         { dia: 'Lunes', mañana: '09:00 - 14:00', tarde: '16:00 - 20:00', activo: true },
@@ -31,32 +33,100 @@ const ConfiguracionAgenda: React.FC = () => {
         <div className="animate-fade-in space-y-6 pb-20">
             {/* SELECTOR DE DOCTOR */}
             <div className="flex flex-wrap items-center gap-3">
-                {doctores.map(doc => (
-                    <button
-                        key={doc.id}
-                        onClick={() => setDoctorActivo(doc.nombre)}
-                        className={`px-5 py-3 rounded-2xl flex items-center gap-3 transition-all border ${
-                            doctorActivo === doc.nombre
-                                ? 'bg-secondary text-white border-secondary shadow-lg shadow-secondary/20'
-                                : 'bg-white text-slate-500 border-slate-100 hover:border-secondary/30'
-                        }`}
-                    >
-                        <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-black text-xs">
-                            {doc.nombre.split(' ').map(n => n[0]).join('')}
+                {doctores.map(doc => {
+                    const isEditing = editarId === doc.id;
+                    return (
+                        <div key={doc.id} className="relative group">
+                            <button
+                                onClick={() => !isEditing && setDoctorActivo(doc.nombre)}
+                                className={`px-5 py-3 rounded-2xl flex items-center gap-3 transition-all border ${doctorActivo === doc.nombre && !isEditing
+                                        ? 'bg-secondary text-white border-secondary shadow-lg shadow-secondary/20'
+                                        : 'bg-white text-slate-500 border-slate-100 hover:border-secondary/30'
+                                    }`}
+                            >
+                                <div className="w-8 h-8 rounded-full bg-slate-100/20 shadow-inner flex items-center justify-center font-black text-xs">
+                                    {isEditing ? '✎' : doc.nombre.split(' ').map(n => n[0]).join('').substring(0, 3)}
+                                </div>
+                                <div className="text-left">
+                                    {isEditing ? (
+                                        <div className="flex flex-col gap-1.5" onClick={e => e.stopPropagation()}>
+                                            <input
+                                                autoFocus
+                                                className="text-[11px] font-black uppercase tracking-tighter leading-none bg-slate-50 border border-slate-200 text-slate-800 px-2 py-1 rounded outline-none w-32 focus:ring-1 focus:ring-secondary"
+                                                value={editForm.nombre}
+                                                onChange={e => setEditForm({ ...editForm, nombre: e.target.value })}
+                                            />
+                                            <input
+                                                className="text-[9px] font-bold mt-0.5 bg-slate-50 border border-slate-200 text-slate-600 px-2 py-1 rounded outline-none w-32 focus:ring-1 focus:ring-secondary"
+                                                value={editForm.especialidad}
+                                                onChange={e => setEditForm({ ...editForm, especialidad: e.target.value })}
+                                            />
+                                            <div className="flex gap-1 mt-1 justify-end">
+                                                <button onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setDoctores(doctores.map(d => d.id === doc.id ? { ...d, nombre: editForm.nombre, especialidad: editForm.especialidad } : d));
+                                                    if (doctorActivo === doc.nombre) setDoctorActivo(editForm.nombre);
+                                                    setEditarId(null);
+                                                }} className="bg-emerald-500 hover:bg-emerald-600 text-white text-[9px] font-bold px-3 py-1 rounded">Guardar</button>
+                                                <button onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setEditarId(null);
+                                                }} className="bg-slate-200 hover:bg-slate-300 text-slate-600 text-[9px] font-bold px-3 py-1 rounded">Cancelar</button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <p className="text-[11px] font-black uppercase tracking-tighter leading-none">{doc.nombre}</p>
+                                            <p className={`text-[9px] font-bold opacity-70 mt-0.5 ${doctorActivo === doc.nombre ? 'text-white' : 'text-slate-400'}`}>{doc.especialidad}</p>
+                                        </>
+                                    )}
+                                </div>
+                            </button>
+                            {!isEditing && (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); setEditarId(doc.id); setEditForm({ nombre: doc.nombre, especialidad: doc.especialidad }); }}
+                                    className="absolute -top-2 -right-2 w-7 h-7 bg-white border border-slate-200 text-slate-400 hover:bg-secondary hover:text-white hover:border-secondary rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-md z-10"
+                                    title="Editar Doctor"
+                                >
+                                    <span className="material-icons text-[14px]">edit</span>
+                                </button>
+                            )}
+                            {!isEditing && doctores.length > 1 && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (confirm(`¿Eliminar a ${doc.nombre}?`)) {
+                                            const newDocs = doctores.filter(d => d.id !== doc.id);
+                                            setDoctores(newDocs);
+                                            if (doctorActivo === doc.nombre) setDoctorActivo(newDocs[0].nombre);
+                                        }
+                                    }}
+                                    className="absolute -bottom-2 -right-2 w-6 h-6 bg-rose-100 border border-white text-rose-500 hover:bg-rose-500 hover:text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-sm z-10"
+                                    title="Eliminar Doctor"
+                                >
+                                    <span className="material-icons text-[12px]">delete</span>
+                                </button>
+                            )}
                         </div>
-                        <div className="text-left">
-                            <p className="text-[11px] font-black uppercase tracking-tighter leading-none">{doc.nombre}</p>
-                            <p className={`text-[9px] font-bold opacity-70 mt-0.5 ${doctorActivo === doc.nombre ? 'text-white' : 'text-slate-400'}`}>{doc.especialidad}</p>
-                        </div>
-                    </button>
-                ))}
-                <button className="w-12 h-12 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 hover:border-secondary hover:text-secondary transition-all flex items-center justify-center">
+                    );
+                })}
+                <button
+                    onClick={() => {
+                        const newId = Math.max(...doctores.map(d => d.id), 0) + 1;
+                        const newDoc = { id: newId, nombre: 'Nuevo Doctor', especialidad: 'Especialidad', color: '#003a70' };
+                        setDoctores([...doctores, newDoc]);
+                        setEditarId(newId);
+                        setEditForm({ nombre: newDoc.nombre, especialidad: newDoc.especialidad });
+                    }}
+                    className="w-12 h-12 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 hover:border-secondary hover:text-secondary hover:bg-secondary/5 transition-all flex items-center justify-center"
+                    title="Añadir Doctor"
+                >
                     <span className="material-icons">add</span>
                 </button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                
+
                 {/* HORARIOS SEMANALES */}
                 <div className="lg:col-span-8 space-y-6">
                     <section className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-100 dark:border-slate-800 shadow-xl">

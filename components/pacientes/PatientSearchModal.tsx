@@ -12,11 +12,11 @@ interface PatientSearchModalProps {
 }
 
 const mockPatients: Paciente[] = [
-    { id: "6110", nombre: "Bárbara", apellidos: "Ruiz Fernandez", dni: "12345678X", telefono: "600123456", alergias: ["Látex", "Metales pesados"], deuda: true, fechaNacimiento: "1985-05-20", consentimientosFirmados: true, historial: [], medicacionActual: "Paracetamol (ocasional)" },
-    { id: "6111", nombre: "Javier", apellidos: "Abad Sanchez", dni: "87654321Y", telefono: "611987654", alergias: ["Penicilina"], deuda: false, fechaNacimiento: "1990-02-15", consentimientosFirmados: false, historial: [] },
-    { id: "6112", nombre: "Maria Carmen", apellidos: "Gomez Perez", dni: "11223344Z", telefono: "622445566", alergias: [], deuda: false, fechaNacimiento: "1978-11-30", consentimientosFirmados: true, historial: [] },
-    { id: "6113", nombre: "Rafael", apellidos: "Martínez López", dni: "55667788A", telefono: "633112233", alergias: [], deuda: false, fechaNacimiento: "2001-07-22", consentimientosFirmados: false, historial: [] },
-    { id: "6114", nombre: "Elena", apellidos: "Vázquez Ruano", dni: "99001122B", telefono: "644998877", alergias: ["Ibuprofeno"], deuda: true, fechaNacimiento: "1972-03-05", consentimientosFirmados: true, historial: [] },
+    { numPac: "XP-2023-014", nombre: "Bárbara", apellidos: "Ruiz Fernandez", dni: "12345678X", telefono: "600123456", alergias: ["Látex", "Metales pesados"], deuda: true, fechaNacimiento: "1985-05-20", consentimientosFirmados: true, historial: [], medicacionActual: "Paracetamol (ocasional)" },
+    { numPac: "XP-2024-089", nombre: "Javier", apellidos: "Abad Sanchez", dni: "87654321Y", telefono: "611987654", alergias: ["Penicilina"], deuda: false, fechaNacimiento: "1990-02-15", consentimientosFirmados: false, historial: [] },
+    { numPac: "XP-2021-452", nombre: "Maria Carmen", apellidos: "Gomez Perez", dni: "11223344Z", telefono: "622445566", alergias: [], deuda: false, fechaNacimiento: "1978-11-30", consentimientosFirmados: true, historial: [] },
+    { numPac: "XP-2022-112", nombre: "Rafael", apellidos: "Martínez López", dni: "55667788A", telefono: "633112233", alergias: [], deuda: false, fechaNacimiento: "2001-07-22", consentimientosFirmados: false, historial: [] },
+    { numPac: "XP-2024-003", nombre: "Elena", apellidos: "Vázquez Ruano", dni: "99001122B", telefono: "644998877", alergias: ["Ibuprofeno"], deuda: true, fechaNacimiento: "1972-03-05", consentimientosFirmados: true, historial: [] },
 ];
 
 const inputCls = "w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 outline-none focus:border-[#051650] focus:ring-2 focus:ring-[#051650]/10 transition-all placeholder:text-slate-300";
@@ -93,7 +93,10 @@ const PatientSearchModal: React.FC<PatientSearchModalProps> = ({ isOpen, onClose
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        const newTotal = mockPatients.length + 1;
+        const generatedNumPac = `LN-${newTotal.toString().padStart(5, '0')}`;
         const patientData = {
+            numPac: generatedNumPac,
             nombre, apellidos, dni, telefono, fechaNacimiento,
             tutor: isMinor ? tutor : undefined,
             alergias: alergias.split(',').map(a => a.trim()).filter(Boolean),
@@ -105,8 +108,7 @@ const PatientSearchModal: React.FC<PatientSearchModalProps> = ({ isOpen, onClose
             if (created) { onSelect({ ...created, historial: [] }); onClose(); return; }
         }
         // Fallback local si BD no está configurada
-        const maxId = mockPatients.reduce((max, p) => Math.max(max, parseInt(p.id, 10)), 6114);
-        const newPatient: Paciente = { id: (maxId + 1).toString(), ...patientData, historial: [] };
+        const newPatient: Paciente = { ...patientData, historial: [] };
         onSelect(newPatient);
         onClose();
     };
@@ -119,7 +121,8 @@ const PatientSearchModal: React.FC<PatientSearchModalProps> = ({ isOpen, onClose
         : mockPatients.filter(p =>
             `${p.nombre} ${p.apellidos}`.toLowerCase().includes(search.toLowerCase()) ||
             p.dni.toLowerCase().includes(search.toLowerCase()) ||
-            p.telefono.includes(search)
+            p.telefono.includes(search) ||
+            p.numPac.toLowerCase().includes(search.toLowerCase())
         );
 
     return (
@@ -137,7 +140,7 @@ const PatientSearchModal: React.FC<PatientSearchModalProps> = ({ isOpen, onClose
                                 {view === 'search' ? 'Buscar Paciente' : 'Nuevo Registro de Paciente'}
                             </h2>
                             <p className="text-xs text-blue-300 font-medium">
-                                {view === 'search' ? 'Por nombre, apellidos, DNI o teléfono' : 'Rellena los datos del nuevo paciente'}
+                                {view === 'search' ? 'Por nombre, apellidos, Nº paciente o teléfono' : 'Rellena los datos del nuevo paciente'}
                             </p>
                         </div>
                     </div>
@@ -165,7 +168,7 @@ const PatientSearchModal: React.FC<PatientSearchModalProps> = ({ isOpen, onClose
                                 <input
                                     autoFocus
                                     type="text"
-                                    placeholder="Nombre, Apellidos, DNI o Teléfono..."
+                                    placeholder="Nombre, Apellidos, Nº paciente o Teléfono..."
                                     className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-[#051650]/20 focus:border-[#051650] outline-none transition-all placeholder:text-slate-300"
                                     value={search}
                                     onChange={e => setSearch(e.target.value)}
@@ -179,7 +182,7 @@ const PatientSearchModal: React.FC<PatientSearchModalProps> = ({ isOpen, onClose
                                     </div>
                                 )}
                                 {filtered.map(p => (
-                                    <button key={p.id} onClick={() => { onSelect(p); onClose(); }}
+                                    <button key={p.numPac} onClick={() => { onSelect(p); onClose(); }}
                                         className="w-full p-3.5 bg-white hover:bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between group transition-all shadow-sm">
                                         <div className="flex items-center gap-3">
                                             <div className="w-10 h-10 bg-[#051650]/10 text-[#051650] rounded-xl flex items-center justify-center font-black text-sm">
@@ -187,7 +190,7 @@ const PatientSearchModal: React.FC<PatientSearchModalProps> = ({ isOpen, onClose
                                             </div>
                                             <div className="text-left">
                                                 <p className="text-sm font-bold text-slate-800">{p.nombre} {p.apellidos}</p>
-                                                <p className="text-xs text-slate-400 font-medium">DNI: {p.dni} · #{p.id} · {p.telefono}</p>
+                                                <p className="text-xs text-slate-400 font-medium">#{p.numPac} · DNI: {p.dni} · {p.telefono}</p>
                                                 {p.alergias.length > 0 && (
                                                     <p className="text-[10px] font-bold text-red-500 mt-0.5">⚠ {p.alergias.join(', ')}</p>
                                                 )}

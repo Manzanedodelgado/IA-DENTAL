@@ -1,254 +1,330 @@
-
-import React, { useState, useEffect } from 'react';
-import { getConversaciones, getMensajes, sendMensaje, ConversacionUI, MensajeUI } from '../services/whatsapp.service';
-import { isDbConfigured } from '../services/db';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-    Search,
-    MoreVertical,
-    Smile,
-    Send,
-    Phone,
-    Video,
-    Circle,
-    User,
-    CheckCheck,
-    Bot,
-    Sparkles,
-    Calendar,
-    ChevronLeft
+    Search, MoreVertical, Smile, Send, Phone, Video,
+    CheckCheck, Bot, Sparkles, ChevronLeft, Wifi, WifiOff,
+    QrCode, RefreshCw, Tag, CheckCircle2, Paperclip, Filter,
+    AlertCircle
 } from 'lucide-react';
-import { Badge } from '../components/UI';
+import {
+    ConversacionUI, MensajeUI, InstanceStatus,
+    isEvolutionConfigured, isChatwootConfigured,
+    getInstanceStatus, getQRCode,
+    getChatwootConversaciones, getChatwootMensajes,
+    sendChatwootMessage, sendTextMessage,
+    labelConversation, resolveConversation
+} from '../services/evolution.service';
 
-interface WhatsappProps {
-    activeSubArea?: string;
-}
+// ── Mock fallback when neither service is configured ─────────────────────────
+const MOCK_CONV: ConversacionUI[] = [
+    { id: '34600123456', name: 'Javier Gómez', phone: '34600123456', lastMessage: 'Perfecto, el Jueves 16 me va genial.', lastMessageAt: Date.now() - 900000, unread: 2, status: 'open', avatar: 'JG', type: 'patient', tags: ['Paciente Premium'] },
+    { id: '34611222333', name: 'Ana Martínez', phone: '34611222333', lastMessage: 'Muchas gracias por la información!', lastMessageAt: Date.now() - 3600000, unread: 0, status: 'resolved', avatar: 'AM', type: 'patient', tags: [] },
+    { id: '34622111444', name: 'Luis Pérez', phone: '34622111444', lastMessage: '¿Qué cuidados necesito después del implante?', lastMessageAt: Date.now() - 7200000, unread: 1, status: 'pending', avatar: 'LP', type: 'patient', tags: ['Post-Implante'] },
+];
+const MOCK_MSGS: MensajeUI[] = [
+    { id: 'm1', sender: 'them', text: 'Hola, me gustaría saber si tienen hueco para una limpieza la semana que viene.', time: '10:42', status: 'read' },
+    { id: 'm2', sender: 'bot', text: '¡Hola! Tengo disponibilidad para ti: Martes 14 a las 10:30h o Jueves 16 a las 16:00h. ¿Cuál le viene mejor?', time: '10:43', status: 'read' },
+    { id: 'm3', sender: 'them', text: 'Perfecto, el Jueves 16 me va genial.', time: '10:45', status: 'read' },
+    { id: 'm4', sender: 'me', text: '¡Perfecto! He reservado el Jueves 16 a las 16:00h para una higiene dental. Recibirás confirmación en breve 😊', time: '10:46', status: 'read' },
+];
 
-const Whatsapp: React.FC<WhatsappProps> = ({ activeSubArea }) => {
-    const [conversaciones, setConversaciones] = useState<ConversacionUI[]>([]);
-    const [activeChat, setActiveChat] = useState<ConversacionUI | null>(null);
-    const [mensajes, setMensajes] = useState<MensajeUI[]>([]);
-    const [newMessage, setNewMessage] = useState('');
+type FilterStatus = 'all' | 'open' | 'pending' | 'resolved';
+const STATUS_COLOR: Record<string, string> = {
+    open: 'bg-emerald-500', pending: 'bg-amber-400', resolved: 'bg-slate-300', online: 'bg-emerald-500', offline: 'bg-slate-300'
+};
 
-    const MOCK_CONV: ConversacionUI[] = [
-        { id: '1', name: 'Javier Gómez', phone: '600123456', lastMessage: 'Perfecto, el Jueves 16 me va genial.', time: '10:45 AM', unread: 0, status: 'online', avatar: 'JG', type: 'patient', tags: ['Paciente Premium'] },
-        { id: '2', name: 'Ana Martínez', phone: '611222333', lastMessage: 'Muchas gracias por la información.', time: 'Ayer', unread: 0, status: 'offline', avatar: 'AM', type: 'patient', tags: [] }
-    ];
-    const MOCK_MESSAGES: MensajeUI[] = [
-        { id: 'm1', sender: 'them', text: 'Hola, me gustaría saber si tienen hueco para una limpieza la semana que viene.', time: '10:42 AM', status: 'read' },
-        { id: 'm2', sender: 'bot', text: '¡Hola! Tenemos disponibilidad para ti. Claro, revisando la agenda tengo los siguientes huecos: Martes 14 a las 10:30 y Jueves 16 a las 16:00. ¿Le viene bien alguno?', time: '10:43 AM', status: 'read' },
-        { id: 'm3', sender: 'them', text: 'Perfecto, el Jueves 16 me va genial.', time: '10:45 AM', status: 'read' }
-    ];
+interface WhatsappProps { activeSubArea?: string; }
 
+const Whatsapp: React.FC<WhatsappProps> = () => {
+    const [convs, setConvs] = useState<ConversacionUI[]>([]);
+    const [active, setActive] = useState<ConversacionUI | null>(null);
+    const [msgs, setMsgs] = useState<MensajeUI[]>([]);
+    const [input, setInput] = useState('');
+    const [search, setSearch] = useState('');
+    const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
+    const [instanceStatus, setInstanceStatus] = useState<InstanceStatus | null>(null);
+    const [qr, setQr] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [sending, setSending] = useState(false);
+    const isMock = !isEvolutionConfigured() && !isChatwootConfigured();
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    // Load conversations
     useEffect(() => {
-        if (isDbConfigured()) {
-            getConversaciones().then(data => {
-                if (data.length > 0) {
-                    setConversaciones(data);
-                    setActiveChat(data[0]);
-                } else {
-                    setConversaciones(MOCK_CONV);
-                    setActiveChat(MOCK_CONV[0]);
-                }
-            });
-        } else {
-            setConversaciones(MOCK_CONV);
-            setActiveChat(MOCK_CONV[0]);
-        }
+        const load = async () => {
+            setLoading(true);
+            if (isChatwootConfigured()) {
+                const data = await getChatwootConversaciones();
+                setConvs(data.length > 0 ? data : MOCK_CONV);
+                if (data.length > 0) setActive(data[0]);
+            } else {
+                setConvs(MOCK_CONV);
+                setActive(MOCK_CONV[0]);
+            }
+            setLoading(false);
+        };
+        load();
     }, []);
 
+    // Load messages when conversation changes
     useEffect(() => {
-        if (!activeChat) return;
-        if (isDbConfigured()) {
-            getMensajes(activeChat.id).then(data => {
-                if (data.length > 0) setMensajes(data);
-                else setMensajes(MOCK_MESSAGES);
-            });
-        } else {
-            setMensajes(MOCK_MESSAGES);
-        }
-    }, [activeChat]);
+        if (!active) return;
+        const load = async () => {
+            if (isChatwootConfigured() && active.chatwootId) {
+                const data = await getChatwootMensajes(active.chatwootId);
+                setMsgs(data.length > 0 ? data : MOCK_MSGS);
+            } else {
+                setMsgs(MOCK_MSGS);
+            }
+        };
+        load();
+    }, [active]);
+
+    // Check Evolution instance status
+    useEffect(() => {
+        if (!isEvolutionConfigured()) return;
+        getInstanceStatus().then(s => setInstanceStatus(s));
+        const interval = setInterval(() => getInstanceStatus().then(s => setInstanceStatus(s)), 30000);
+        return () => clearInterval(interval);
+    }, []);
+
+    // Auto-scroll messages
+    useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs]);
 
     const handleSend = async () => {
-        if (!newMessage.trim() || !activeChat) return;
-        const msg: MensajeUI = { id: Date.now().toString(), sender: 'me', text: newMessage, time: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }), status: 'sent' };
-        setMensajes(prev => [...prev, msg]);
-        setNewMessage('');
-        if (isDbConfigured()) {
-            await sendMensaje(activeChat.id, newMessage, 'clinica');
+        if (!input.trim() || !active) return;
+        const text = input.trim();
+        const optimistic: MensajeUI = { id: Date.now().toString(), sender: 'me', text, time: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }), status: 'sent' };
+        setMsgs(p => [...p, optimistic]);
+        setInput('');
+        setSending(true);
+
+        try {
+            if (isChatwootConfigured() && active.chatwootId) {
+                const ok = await sendChatwootMessage(active.chatwootId, text);
+                if (!ok) throw new Error();
+            } else if (isEvolutionConfigured()) {
+                const ok = await sendTextMessage(active.phone, text);
+                if (!ok) throw new Error();
+            }
+            setMsgs(p => p.map(m => m.id === optimistic.id ? { ...m, status: 'delivered' } : m));
+        } catch {
+            setMsgs(p => p.map(m => m.id === optimistic.id ? { ...m, status: 'failed' } : m));
+        } finally {
+            setSending(false);
         }
     };
 
-    return (
-        <div className="flex flex-col h-full space-y-4">
+    const handleGetQR = async () => {
+        const code = await getQRCode();
+        setQr(code);
+    };
 
-            <div className="flex-1 flex bg-slate-50 dark:bg-slate-900 rounded-[2.5rem] border-2 border-[#051650] dark:border-slate-800 shadow-2xl shadow-slate-200/50 overflow-hidden animate-in fade-in duration-700">
-                {/* Conversations List */}
-                <div className="w-96 border-r border-slate-200 dark:border-slate-800 flex flex-col bg-white dark:bg-slate-800 relative z-20">
-                    <div className="p-8 border-b border-slate-100 dark:border-slate-700 shrink-0">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-3xl font-black text-[#051650] dark:text-white uppercase tracking-tighter">Chats</h2>
-                            <button className="p-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl transition-all">
-                                <MoreVertical className="w-5 h-5 text-slate-400" />
-                            </button>
+    const filteredConvs = convs
+        .filter(c => filterStatus === 'all' || c.status === filterStatus)
+        .filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search));
+
+    const connectionBadge = () => {
+        if (isMock) return { text: 'Modo demo', color: 'bg-amber-50 text-amber-700 border-amber-200', icon: AlertCircle };
+        if (isEvolutionConfigured() && instanceStatus?.state === 'open') return { text: 'WhatsApp conectado', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: Wifi };
+        if (isEvolutionConfigured() && instanceStatus?.state === 'connecting') return { text: 'Conectando...', color: 'bg-blue-50 text-blue-700 border-blue-200', icon: RefreshCw };
+        if (isEvolutionConfigured()) return { text: 'WhatsApp desconectado', color: 'bg-rose-50 text-rose-700 border-rose-200', icon: WifiOff };
+        if (isChatwootConfigured()) return { text: 'Chatwoot conectado', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: Wifi };
+        return { text: 'Sin configurar', color: 'bg-slate-50 text-slate-500 border-slate-200', icon: WifiOff };
+    };
+    const badge = connectionBadge();
+    const BadgeIcon = badge.icon;
+
+    return (
+        <div className="flex flex-col h-full space-y-3">
+
+            {/* Connection status bar */}
+            <div className="flex items-center justify-between">
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-wider ${badge.color}`}>
+                    <BadgeIcon className="w-3 h-3" />
+                    {badge.text}
+                    {isMock && <span className="text-amber-500 font-bold normal-case tracking-normal ml-1">— Configura VITE_EVOLUTION_API_URL o VITE_CHATWOOT_URL en .env.local</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                    {isEvolutionConfigured() && instanceStatus?.state !== 'open' && (
+                        <button onClick={handleGetQR} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0056b3] text-white rounded-xl text-[10px] font-black uppercase hover:bg-[#004494] transition-all">
+                            <QrCode className="w-3.5 h-3.5" />Conectar WhatsApp
+                        </button>
+                    )}
+                    <button onClick={async () => { const d = await getChatwootConversaciones(); if (d.length) setConvs(d); }} className="p-2 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all">
+                        <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                    </button>
+                </div>
+            </div>
+
+            {/* QR Modal */}
+            {qr && (
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200]" onClick={() => setQr(null)}>
+                    <div className="bg-white rounded-2xl p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <p className="text-[12px] font-black text-[#051650] uppercase tracking-widest mb-4 text-center">Escanea con WhatsApp</p>
+                        <img src={`data:image/png;base64,${qr}`} alt="QR Code" className="w-64 h-64 rounded-xl" />
+                        <p className="text-[10px] text-slate-400 text-center mt-3">WhatsApp → Dispositivos vinculados → Vincular dispositivo</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Main chat UI */}
+            <div className="flex-1 flex bg-white rounded-2xl border-2 border-[#051650] shadow-xl overflow-hidden" style={{ minHeight: 0 }}>
+
+                {/* Left: Conversation List */}
+                <div className="w-80 border-r border-slate-200 flex flex-col shrink-0">
+                    <div className="p-4 border-b border-slate-100 space-y-3">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-[14px] font-black text-[#051650] uppercase tracking-tighter">Chats</h2>
+                            <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{convs.length}</span>
                         </div>
-                        <div className="relative group">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
-                            <input
-                                type="text"
-                                placeholder="Buscar conversación..."
-                                className="w-full pl-12 pr-4 py-4 text-sm font-bold bg-slate-50 dark:bg-slate-900 border-none rounded-2xl focus:ring-2 focus:ring-blue-600/20 transition-all outline-none"
-                            />
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..." className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[11px] focus:outline-none focus:ring-2 focus:ring-[#0056b3]/20" />
+                        </div>
+                        <div className="flex gap-1">
+                            {(['all', 'open', 'pending', 'resolved'] as FilterStatus[]).map(s => (
+                                <button key={s} onClick={() => setFilterStatus(s)} className={`flex-1 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${filterStatus === s ? 'bg-[#0056b3] text-white' : 'bg-slate-50 text-slate-400 border border-slate-200 hover:border-[#0056b3]/30'}`}>
+                                    {s === 'all' ? 'Todos' : s === 'open' ? 'Abiertos' : s === 'pending' ? 'Pendientes' : 'Resueltos'}
+                                </button>
+                            ))}
                         </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                        {conversaciones.map(conv => {
-                            const isActive = activeChat?.id === conv.id;
-                            return (
-                                <div
-                                    key={conv.id}
-                                    onClick={() => setActiveChat(conv)}
-                                    className={`p-4 flex items-start gap-4 rounded-[1.5rem] cursor-pointer group transition-all ${isActive ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-[#051650] dark:border-blue-800/50 shadow-lg shadow-blue-500/5' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
-                                >
-                                    <div className="relative shrink-0">
-                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl shadow-lg transition-transform group-hover:rotate-3 ${isActive ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`}>
-                                            {conv.name.substring(0, 2).toUpperCase()}
+                    <div className="flex-1 overflow-y-auto">
+                        {loading ? (
+                            <div className="p-4 text-center text-[11px] text-slate-400">Cargando conversaciones...</div>
+                        ) : filteredConvs.length === 0 ? (
+                            <div className="p-4 text-center text-[11px] text-slate-400">No hay conversaciones</div>
+                        ) : (
+                            filteredConvs.map(conv => {
+                                const isAct = active?.id === conv.id;
+                                return (
+                                    <div key={conv.id} onClick={() => setActive(conv)}
+                                        className={`px-3 py-3 flex items-start gap-3 cursor-pointer border-b border-slate-50 transition-all ${isAct ? 'bg-[#0056b3]/5 border-l-4 border-l-[#0056b3]' : 'hover:bg-slate-50'}`}>
+                                        <div className="relative shrink-0">
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm ${isAct ? 'bg-[#0056b3] text-white' : 'bg-slate-100 text-slate-500'}`}>
+                                                {conv.avatar}
+                                            </div>
+                                            <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${STATUS_COLOR[conv.status] ?? 'bg-slate-300'}`} />
                                         </div>
-                                        {conv.status === 'online' && <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-4 border-white dark:border-slate-800 rounded-full"></div>}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <p className={`font-black uppercase tracking-tight truncate ${isActive ? 'text-[#051650] dark:text-white' : 'text-slate-700 dark:text-slate-300'}`}>{conv.name}</p>
-                                            <p className={`text-[10px] font-black uppercase ${isActive ? 'text-blue-600' : 'text-slate-400'}`}>{conv.time}</p>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center justify-between mb-0.5">
+                                                <p className="text-[11px] font-black text-[#051650] truncate">{conv.name}</p>
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                    {conv.unread > 0 && <span className="w-4 h-4 bg-[#0056b3] text-white text-[9px] font-black rounded-full flex items-center justify-center">{conv.unread}</span>}
+                                                </div>
+                                            </div>
+                                            <p className="text-[10px] text-slate-400 truncate">{conv.lastMessage}</p>
+                                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                                                {conv.tags.slice(0, 2).map(t => <span key={t} className="text-[8px] font-black text-[#0056b3] bg-[#0056b3]/10 px-1.5 py-0.5 rounded-full">{t}</span>)}
+                                            </div>
                                         </div>
-                                        <p className={`text-xs font-medium truncate ${isActive ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 dark:text-slate-500'}`}>{conv.lastMessage}</p>
                                     </div>
-                                </div>
-                            );
-                        })}
+                                );
+                            })
+                        )}
                     </div>
                 </div>
 
-                {/* Chat Window */}
-                <div className="flex-1 flex flex-col bg-slate-50/50 dark:bg-slate-900/50 relative">
-                    {/* Decorative background logo/pattern */}
-                    <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
-                        <Bot className="w-96 h-96 rotate-12" />
-                    </div>
-
-                    <div className="p-6 border-b border-slate-200 dark:border-slate-800 shrink-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md flex justify-between items-center relative z-10">
-                        {activeChat && (
-                            <div className="flex items-center gap-4">
-                                <div className="lg:hidden p-2 -ml-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
-                                    <ChevronLeft className="w-5 h-5 text-slate-400" />
-                                </div>
-                                <div className="relative">
-                                    <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-lg">
-                                        {activeChat.name.substring(0, 2).toUpperCase()}
+                {/* Right: Chat window */}
+                <div className="flex-1 flex flex-col" style={{ minWidth: 0 }}>
+                    {!active ? (
+                        <div className="flex-1 flex items-center justify-center">
+                            <div className="text-center">
+                                <Bot className="w-16 h-16 text-slate-100 mx-auto mb-4" />
+                                <p className="text-[13px] font-black text-slate-300 uppercase tracking-widest">Selecciona una conversación</p>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Header */}
+                            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm bg-[#0056b3] text-white`}>{active.avatar}</div>
+                                    <div>
+                                        <p className="text-[12px] font-black text-[#051650]">{active.name}</p>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className={`w-1.5 h-1.5 rounded-full ${STATUS_COLOR[active.status] ?? 'bg-slate-300'}`} />
+                                            <span className="text-[9px] text-slate-400 font-bold uppercase">{active.phone}</span>
+                                            {active.assignedAgent && <span className="text-[9px] text-slate-400">· {active.assignedAgent}</span>}
+                                        </div>
                                     </div>
-                                    {activeChat.status === 'online' && <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-white dark:border-slate-800 rounded-full"></div>}
                                 </div>
-                                <div>
-                                    <p className="font-black text-[#051650] dark:text-white uppercase tracking-tighter">{activeChat.name}</p>
-                                    <div className="flex items-center gap-1.5">
-                                        {activeChat.status === 'online' && <Badge variant="blue">En línea</Badge>}
-                                        {activeChat.tags.map(t => <span key={t} className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">• {t}</span>)}
-                                    </div>
+                                <div className="flex items-center gap-1.5">
+                                    <button className="p-2 hover:bg-slate-50 rounded-xl transition-all" title="Llamar"><Phone className="w-4 h-4 text-slate-400" /></button>
+                                    <button onClick={async () => { if (active.chatwootId) { await labelConversation(active.chatwootId, ['Revisado']); } }} className="p-2 hover:bg-slate-50 rounded-xl transition-all" title="Etiquetar"><Tag className="w-4 h-4 text-slate-400" /></button>
+                                    <button onClick={async () => { if (active.chatwootId) { await resolveConversation(active.chatwootId); setConvs(p => p.map(c => c.id === active.id ? { ...c, status: 'resolved' } : c)); } }} className="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-[10px] font-black uppercase hover:bg-emerald-100 transition-all">
+                                        <CheckCircle2 className="w-3.5 h-3.5" />Resolver
+                                    </button>
                                 </div>
                             </div>
-                        )}
-                        <div className="flex items-center gap-2">
-                            <button className="p-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-all text-slate-400 border border-slate-100 dark:border-slate-700">
-                                <Phone className="w-5 h-5" />
-                            </button>
-                            <button className="p-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-all text-slate-400 border border-slate-100 dark:border-slate-700">
-                                <Video className="w-5 h-5" />
-                            </button>
-                            <button className="p-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-all text-slate-400 border border-slate-100 dark:border-slate-700">
-                                <Search className="w-5 h-5" />
-                            </button>
-                        </div>
-                    </div>
 
-                    <div className="flex-1 p-8 overflow-y-auto space-y-6 relative z-10">
-                        <div className="flex justify-center">
-                            <span className="bg-white dark:bg-slate-800 px-4 py-1.5 rounded-full text-[10px] font-black uppercase text-slate-400 tracking-widest border-2 border-[#051650] dark:border-slate-700 shadow-sm">
-                                Hoy, 16 de Febrero
-                            </span>
-                        </div>
-                        {mensajes.map(msg => {
-                            if (msg.sender === 'them') {
-                                return (
-                                    <div key={msg.id} className="flex justify-start animate-in slide-in-from-left-4 duration-500">
-                                        <div className="bg-white dark:bg-slate-800 rounded-[2rem] rounded-tl-sm py-4 px-6 max-w-lg shadow-sm border border-slate-100 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-sm">
-                                            <p className="leading-relaxed text-[13px]">{msg.text}</p>
-                                            <div className="flex justify-end mt-1">
-                                                <span className="text-[9px] text-slate-400 uppercase font-black">{msg.time}</span>
+                            {/* Messages */}
+                            <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50/30">
+                                {msgs.map(msg => (
+                                    <div key={msg.id} className={`flex ${msg.sender !== 'them' ? 'justify-end' : 'justify-start'}`}>
+                                        {msg.sender === 'bot' ? (
+                                            <div className="bg-[#051650] text-white rounded-2xl rounded-tr-sm py-3 px-4 max-w-lg shadow-lg">
+                                                <div className="flex items-center gap-2 mb-1.5">
+                                                    <Bot className="w-3.5 h-3.5 text-blue-300" />
+                                                    <span className="text-[9px] font-black uppercase text-blue-300 tracking-wider">Sara AI</span>
+                                                    <Sparkles className="w-3 h-3 text-blue-400/50" />
+                                                </div>
+                                                <p className="text-[12px] leading-relaxed text-blue-50/90">{msg.text}</p>
+                                                <div className="flex justify-end mt-1">
+                                                    <span className="text-[9px] text-blue-400">{msg.time}</span>
+                                                </div>
                                             </div>
-                                        </div>
+                                        ) : msg.sender === 'me' ? (
+                                            <div className="bg-[#0056b3] text-white rounded-2xl rounded-tr-sm py-2.5 px-4 max-w-lg shadow-sm">
+                                                <p className="text-[12px] leading-relaxed">{msg.text}</p>
+                                                <div className="flex justify-end mt-1 items-center gap-1.5">
+                                                    <span className="text-[9px] text-blue-200">{msg.time}</span>
+                                                    <CheckCheck className={`w-3.5 h-3.5 ${msg.status === 'read' ? 'text-blue-200' : msg.status === 'failed' ? 'text-rose-300' : 'text-blue-300/60'}`} />
+                                                    {msg.status === 'failed' && <span className="text-[9px] text-rose-300">Error</span>}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="bg-white rounded-2xl rounded-tl-sm py-2.5 px-4 max-w-lg shadow-sm border border-slate-100">
+                                                <p className="text-[12px] text-slate-700 leading-relaxed">{msg.text}</p>
+                                                <div className="flex justify-end mt-1">
+                                                    <span className="text-[9px] text-slate-400">{msg.time}</span>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                );
-                            } else if (msg.sender === 'bot') {
-                                return (
-                                    <div key={msg.id} className="flex justify-end animate-in slide-in-from-right-4 duration-500">
-                                        <div className="bg-[#051650] text-white rounded-[2rem] rounded-tr-sm py-5 px-7 max-w-xl shadow-xl shadow-blue-900/10 border-2 border-[#051650] relative overflow-hidden group">
-                                            <div className="flex items-center gap-3 mb-3">
-                                                <div className="w-8 h-8 bg-blue-600/30 backdrop-blur-md rounded-xl flex items-center justify-center order-last ring-1 ring-white/20">
-                                                    <Bot className="w-4 h-4" />
-                                                </div>
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-[10px] font-black uppercase tracking-widest text-blue-300">Inteligencia Sarah</span>
-                                                    <span className="text-[8px] font-bold uppercase text-blue-400/80">Gestión Automática</span>
-                                                </div>
-                                            </div>
-                                            <p className="text-[13px] font-medium leading-relaxed mb-4 text-blue-50/90">{msg.text}</p>
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex gap-2">
-                                                    <Badge variant="blue" className="bg-white/10 text-white border-white/20">AIA</Badge>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-[9px] text-blue-300 uppercase font-black">{msg.time}</span>
-                                                    <CheckCheck className="w-4 h-4 text-blue-400" />
-                                                </div>
-                                            </div>
-                                            <Sparkles className="absolute -top-2 -right-2 w-12 h-12 text-blue-400/10 rotate-12 group-hover:scale-110 transition-transform" />
-                                        </div>
-                                    </div>
-                                );
-                            } else {
-                                return (
-                                    <div key={msg.id} className="flex justify-end animate-in slide-in-from-right-4 duration-500">
-                                        <div className="bg-blue-600 text-white rounded-[2rem] rounded-tr-sm py-4 px-6 max-w-lg shadow-sm">
-                                            <p className="leading-relaxed text-[13px]">{msg.text}</p>
-                                            <div className="flex justify-end mt-1 items-center gap-2">
-                                                <span className="text-[9px] text-blue-200 uppercase font-black">{msg.time}</span>
-                                                <CheckCheck className="w-4 h-4 text-blue-300" />
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            }
-                        })}
-                    </div>
+                                ))}
+                                <div ref={messagesEndRef} />
+                            </div>
 
-                    <div className="p-8 shrink-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-800 relative z-10">
-                        <div className="relative group mx-auto max-w-4xl">
-                            <button className="absolute left-4 top-1/2 -translate-y-1/2 p-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl transition-all text-slate-400">
-                                <Smile className="w-6 h-6" />
-                            </button>
-                            <input
-                                type="text"
-                                value={newMessage}
-                                onChange={e => setNewMessage(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && handleSend()}
-                                placeholder={`Escribe un mensaje para ${activeChat?.name.split(' ')[0] || '...'}`}
-                                className="w-full pl-16 pr-16 py-5 bg-slate-50 dark:bg-slate-900 border-none rounded-3xl font-bold text-sm focus:ring-2 focus:ring-blue-600/10 transition-all outline-none"
-                            />
-                            <button onClick={handleSend} className="absolute right-3 top-1/2 -translate-y-1/2 p-4 bg-[#051650] text-white rounded-2xl hover:scale-105 active:scale-95 transition-all shadow-xl shadow-blue-900/20">
-                                <Send className="w-5 h-5" />
-                            </button>
-                        </div>
-                    </div>
+                            {/* Input */}
+                            <div className="p-3 border-t border-slate-200 bg-white shrink-0">
+                                <div className="flex items-center gap-2">
+                                    <button className="p-2 text-slate-400 hover:text-slate-600 transition-colors"><Paperclip className="w-4 h-4" /></button>
+                                    <button className="p-2 text-slate-400 hover:text-slate-600 transition-colors"><Smile className="w-4 h-4" /></button>
+                                    <input
+                                        value={input}
+                                        onChange={e => setInput(e.target.value)}
+                                        onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
+                                        placeholder={`Escribe a ${active.name.split(' ')[0]}...`}
+                                        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-[#0056b3]/20"
+                                    />
+                                    <button
+                                        onClick={handleSend}
+                                        disabled={!input.trim() || sending}
+                                        className="w-9 h-9 bg-[#0056b3] text-white rounded-xl flex items-center justify-center hover:bg-[#004494] disabled:opacity-40 transition-all shadow-sm"
+                                    >
+                                        {sending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                                    </button>
+                                </div>
+                                {isMock && (
+                                    <p className="text-[9px] text-amber-500 text-center mt-1.5">
+                                        ⚠️ Modo demo — configura VITE_EVOLUTION_API_URL y VITE_CHATWOOT_URL para mensajes reales
+                                    </p>
+                                )}
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
         </div>

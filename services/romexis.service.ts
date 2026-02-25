@@ -41,20 +41,20 @@ export interface RomexisPanoramica {
 const MOCK_PANORAMICAS: RomexisPanoramica[] = [
     {
         id: 'rx-001', date: '2024-03-25', dateLabel: '25 Mar 2024',
-        url: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&q=70&w=900',
-        thumbnail: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&q=70&w=200',
+        url: 'https://upload.wikimedia.org/wikipedia/commons/e/ec/Panoramic_dental_X-ray.jpg',
+        thumbnail: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Panoramic_dental_X-ray.jpg/800px-Panoramic_dental_X-ray.jpg',
         type: 'panoramica',
     },
     {
         id: 'rx-002', date: '2023-01-10', dateLabel: '10 Ene 2023',
-        url: 'https://images.unsplash.com/photo-1588776814546-daab30f310ce?auto=format&fit=crop&q=70&w=900',
-        thumbnail: 'https://images.unsplash.com/photo-1588776814546-daab30f310ce?auto=format&fit=crop&q=70&w=200',
+        url: 'https://upload.wikimedia.org/wikipedia/commons/e/ec/Panoramic_dental_X-ray.jpg',
+        thumbnail: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Panoramic_dental_X-ray.jpg/800px-Panoramic_dental_X-ray.jpg',
         type: 'panoramica',
     },
     {
         id: 'rx-003', date: '2022-06-05', dateLabel: '05 Jun 2022',
-        url: 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&q=70&w=900',
-        thumbnail: 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&q=70&w=200',
+        url: 'https://upload.wikimedia.org/wikipedia/commons/e/ec/Panoramic_dental_X-ray.jpg',
+        thumbnail: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Panoramic_dental_X-ray.jpg/800px-Panoramic_dental_X-ray.jpg',
         type: 'panoramica',
     },
 ];

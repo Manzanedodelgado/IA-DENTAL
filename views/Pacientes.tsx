@@ -12,8 +12,8 @@ import {
     Activity, CheckCircle, Clock, Brain, Camera,
     FileText, CircleDollarSign, ChevronDown, ChevronUp,
     Stethoscope, ShieldCheck, ShieldAlert, Pencil,
-    Phone, Calendar, MessageSquare, ArrowLeftRight,
-    Gavel, UserPlus, TrendingUp, AlertTriangle, X, Plus, Save, Pill
+    Phone, Calendar, MessageSquare, ArrowLeftRight, ExternalLink, Maximize2,
+    Gavel, UserPlus, TrendingUp, AlertTriangle, X, Plus, Save, Pill, Search
 } from 'lucide-react';
 import {
     getPatientPanoramicas, isRomexisConfigured, type RomexisPanoramica
@@ -29,6 +29,7 @@ import {
 import {
     getSoapNotes, createSoapNote, updateSoapNote,
 } from '../services/soap.service';
+import { getEntradasMedicas, getTratamientosPaciente } from '../services/citas.service';
 import { searchVademecum, type Medicamento } from '../data/vademecum';
 import { Badge } from '../components/UI';
 
@@ -37,119 +38,6 @@ interface PacientesProps {
     onSubAreaChange: (subArea: string) => void;
     showToast: (message: string) => void;
 }
-
-const initialPacienteState: Paciente = {
-    id: "6110",
-    nombre: "Bárbara",
-    apellidos: "Ruiz Fernandez",
-    dni: "12345678X",
-    telefono: "600123456",
-    fechaNacimiento: "1985-05-20",
-    medicacionActual: "Paracetamol (ocasional)",
-    alergias: ["Látex", "Metales pesados"],
-    deuda: true,
-    consentimientosFirmados: false,
-    historial: [
-        {
-            id: "1",
-            fecha: "20 Oct 2024",
-            doctor: "Pablo García",
-            especialidad: "Implantología",
-            subjetivo: "Paciente acude para revisión post-quirúrgica. Refiere molestia leve (3/10) en zona del 2.6.",
-            objetivo: "Encía en fase de cicatrización normocrómica. Puntos de sutura estables. RX control: implante osteointegrado.",
-            analisis: "Evolución clínica satisfactoria.",
-            plan: "Retirada de puntos. Higiene de la zona con clorhexidina 0.12%. Próxima cita en 15 días.",
-            firmada: true,
-            eva: 3,
-            timestamp: "2024-10-20 11:34:22",
-            alertasDetectadas: []
-        },
-        {
-            id: "2",
-            fecha: "05 Ago 2024",
-            doctor: "Elena Rubio",
-            especialidad: "Higiene",
-            subjetivo: "Revisión semestral de higiene. Sin sintomatología.",
-            objetivo: "Placa supragingival moderada en sectores posteriores. Sin sangrado al sondaje.",
-            analisis: "Gingivitis leve inducida por placa.",
-            plan: "Tartrectomía ultrasónica. Pulido. Instrucciones de higiene reforzadas.",
-            firmada: true,
-            eva: 0,
-            timestamp: "2024-08-05 09:15:00",
-            alertasDetectadas: []
-        },
-        {
-            id: "3",
-            fecha: "14 Mar 2024",
-            doctor: "Pablo García",
-            especialidad: "Implantología",
-            subjetivo: "Primera fase quirúrgica. Colocación implante 2.6. Paciente nerviosa pero estable.",
-            objetivo: "Anestesia local efectiva. Inserción implante Nobel Ø4.3 L10mm. Torque 45Ncm. ISQ 72.",
-            analisis: "Implante inserto en buenas condiciones. Sin complicaciones intraoperatorias.",
-            plan: "Sutura reabsorbible 3-0. Amoxicilina 500mg 8h/7d. Ibuprofeno 600mg 8h/3d. Control en 10 días.",
-            firmada: true,
-            eva: 5,
-            timestamp: "2024-03-14 10:00:00",
-            alertasDetectadas: ["Alergia látex — guantes nitrilo"]
-        },
-        {
-            id: "4",
-            fecha: "22 Ene 2024",
-            doctor: "Elena Rubio",
-            especialidad: "Ortodoncia",
-            subjetivo: "Visita de seguimiento ortodoncia. Refiere ligera molestia tras último ajuste.",
-            objetivo: "Alineación mejorando en sector anterior. Rotación del 2.3 sin alcanzar objetivo. Gaps residuales de 0.5mm.",
-            analisis: "Progreso adecuado. Estimado 3-4 meses más para finalizar.",
-            plan: "Cambio aligner set 18→19. Cita en 6 semanas.",
-            firmada: true,
-            eva: 1,
-            timestamp: "2024-01-22 17:00:00",
-            alertasDetectadas: []
-        },
-        {
-            id: "5",
-            fecha: "03 Nov 2023",
-            doctor: "Pablo García",
-            especialidad: "Urgencia",
-            subjetivo: "Dolor agudo en 3.6, EVA 8/10. Inicio hace 48h. Dolor nocturno. Pulsátil.",
-            objetivo: "Percusión positiva en 3.6. Prueba de frío: no responde. RX: lesión periapical difusa Ø4mm.",
-            analisis: "Necrosis pulpar con absceso periapical agudo en 3.6.",
-            plan: "Apertura cameral de urgencia bajo anestesia. Drenaje. Prescripción amoxicilina + metronidazol. Cita en 3 días para inicio endodoncia.",
-            firmada: true,
-            eva: 8,
-            timestamp: "2023-11-03 19:30:00",
-            alertasDetectadas: ["Dolor severo — seguimiento prioritario"]
-        },
-        {
-            id: "6",
-            fecha: "18 Sep 2023",
-            doctor: "Elena Rubio",
-            especialidad: "Diagnóstico",
-            subjetivo: "Primera visita. Paciente refiere no haber ido al dentista en 5 años. Quiere revisión completa.",
-            objetivo: "Exploración intraoral: múltiples caries (1.7, 2.3, 3.6). Periodontitis estadio II. Maloclusión clase II div 1.",
-            analisis: "Patología múltiple. Prioridad: periodoncia básica y urgencias cariosas.",
-            plan: "Ortopantomografía + serie periapical. Presupuesto global. Inicio higiene profesional. Cita implantología para valoración 1.6.",
-            firmada: true,
-            eva: 2,
-            timestamp: "2023-09-18 11:00:00",
-            alertasDetectadas: []
-        },
-        {
-            id: "7",
-            fecha: "02 Feb 2023",
-            doctor: "Pablo García",
-            especialidad: "Cirugía",
-            subjetivo: "Extracción 1.6 irrecuperable. Pérdida de soporte >80%, fractura radicular vertical.",
-            objetivo: "TC previo: tabla vestibular preservada, tabique interdental presente. Sin patología sinusal.",
-            analisis: "Exodoncia indicada. Sector favorable para implante diferido 3 meses.",
-            plan: "Extracción atraumática con luxadores Bein. Curetaje alveolar. Colágeno hemostático. Sutura. Mantener espacio para implante futuro.",
-            firmada: true,
-            eva: 4,
-            timestamp: "2023-02-02 09:00:00",
-            alertasDetectadas: []
-        }
-    ]
-};
 
 // Color por especialidad
 const especialidadConfig: Record<string, { dot: string; badge: string; border: string }> = {
@@ -163,9 +51,24 @@ const especialidadConfig: Record<string, { dot: string; badge: string; border: s
 };
 const getEsp = (esp: string) => especialidadConfig[esp] ?? especialidadConfig['General'];
 
+/** Infiere la especialidad dominante a partir de los nombre de tratamientos */
+const inferEspecialidad = (tratamientos: string[]): string => {
+    const joined = tratamientos.join(' ').toLowerCase();
+    if (/implante|osteo|interfase|aditamento|seno|prgf|plasma/.test(joined)) return 'Implantología';
+    if (/ortodoncia|retenedor|bracket|alineador/.test(joined)) return 'Ortodoncia';
+    if (/endodoncia|conducto|pulp/.test(joined)) return 'Endodoncia';
+    if (/curetaje|periodoncia|raspado|sondaje/.test(joined)) return 'Periodoncia';
+    if (/prótesis|corona|puente|póntico|prostodoncia/.test(joined)) return 'Prostodoncia';
+    if (/cirugía|exodoncia|extracción|alvéolo/.test(joined)) return 'Cirugía Oral';
+    if (/blanqueamiento|carilla|estética|composite/.test(joined)) return 'Estética Dental';
+    if (/limpieza|higiene|tartrectomía|profilaxis/.test(joined)) return 'Higiene';
+    return 'Odontología General';
+};
+
 
 const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, showToast }) => {
-    const [paciente, setPaciente] = useState<Paciente>(initialPacienteState);
+    const [paciente, setPaciente] = useState<Paciente | null>(null);
+
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [searchInitialView, setSearchInitialView] = useState<'search' | 'create'>('search');
     const [saraTyped, setSaraTyped] = useState('');
@@ -184,35 +87,34 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
     const [medications, setMedications] = useState<PatientMedication[]>([]);
     const [allergies, setAllergies] = useState<PatientAllergy[]>([]);
     const [alertEditMode, setAlertEditMode] = useState(false);
+    const [zoomImage, setZoomImage] = useState<string | null>(null);
     const [newAllergyText, setNewAllergyText] = useState('');
     const [medQuery, setMedQuery] = useState('');
     const [medSuggestions, setMedSuggestions] = useState<Medicamento[]>([]);
 
     // Inicializar alergias y medicaciones desde el paciente + Supabase
     useEffect(() => {
-        // Alergias: partir del estado local del paciente (mock)
-        const localAllergies: PatientAllergy[] = paciente.alergias.map((n, i) => ({
-            id: `local-${i}`, paciente_id: paciente.id, nombre: n, severidad: 'moderada' as const,
-        }));
-        const localMeds: PatientMedication[] = paciente.medicacionActual
-            ? [{ id: 'local-med-0', paciente_id: paciente.id, nombre: paciente.medicacionActual, importante: false }]
-            : [];
-
-        setAllergies(localAllergies);
-        setMedications(localMeds);
-
+        if (!paciente?.numPac) return;
         if (isSupabaseConfigured()) {
-            getAllergies(paciente.id).then(a => { if (a.length) setAllergies(a); });
-            getMedications(paciente.id).then(m => { if (m.length) setMedications(m); });
+            getAllergies(paciente.numPac).then(a => { if (a.length) setAllergies(a); });
+            getMedications(paciente.numPac).then(m => { if (m.length) setMedications(m); });
         }
-
-        // Cargar notas SOAP desde BD (si está configurado)
-        getSoapNotes(paciente.id).then(notes => {
-            if (notes.length > 0) {
-                setPaciente(prev => ({ ...prev, historial: notes }));
+        // Cargar entradas médicas reales desde TtosMed
+        const idPac = paciente.idPac;
+        Promise.all([
+            getSoapNotes(paciente.numPac),
+            idPac ? getEntradasMedicas(idPac) : Promise.resolve([]),
+        ]).then(([soapNotes, entradasMedicas]) => {
+            // SOAP notes prevalecen si coincide timestamp. Entradas médicas van después.
+            const combined = [
+                ...soapNotes,
+                ...entradasMedicas.filter(e => !soapNotes.find(s => s.id === e.id)),
+            ];
+            if (combined.length > 0) {
+                setPaciente(prev => prev ? { ...prev, historial: combined } : prev);
             }
         });
-    }, [paciente.id]);
+    }, [paciente?.numPac, paciente?.alergias, paciente?.medicacionActual]);
 
     // Autocompletado del vademecum
     useEffect(() => {
@@ -221,8 +123,8 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
 
 
     useEffect(() => {
-        if (activeSubArea === 'ACTION_SEARCH') { setSearchInitialView('search'); setIsSearchOpen(true); onSubAreaChange('Historial Clínico'); }
-        else if (activeSubArea === 'ACTION_NEW') { setSearchInitialView('create'); setIsSearchOpen(true); onSubAreaChange('Historial Clínico'); }
+        if (activeSubArea === 'ACTION_SEARCH') { setSearchInitialView('search'); setIsSearchOpen(true); onSubAreaChange('Historia Clínica'); }
+        else if (activeSubArea === 'ACTION_NEW') { setSearchInitialView('create'); setIsSearchOpen(true); onSubAreaChange('Historia Clínica'); }
     }, [activeSubArea, onSubAreaChange]);
 
     // SARA IA typing effect
@@ -235,7 +137,7 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
             if (i >= saraText.length) clearInterval(timer);
         }, 18);
         return () => clearInterval(timer);
-    }, [paciente.id]);
+    }, [paciente?.numPac]);
 
     const handleSelectPatient = (p: Paciente) => { setPaciente(p); showToast(`Cargando ficha de ${p.nombre}`); };
 
@@ -258,10 +160,12 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
             alertasDetectadas: []
         };
         // Intentar persistir en BD
-        const savedNote = await createSoapNote(paciente.id, newNote);
-        const finalNote = savedNote ?? newNote;
-        setPaciente(prev => ({ ...prev, historial: [finalNote, ...prev.historial] }));
-        showToast('Evolutivo registrado legalmente');
+        if (paciente.numPac) {
+            const savedNote = await createSoapNote(paciente.numPac, newNote);
+            const finalNote = savedNote ?? newNote;
+            setPaciente(prev => ({ ...prev, historial: [finalNote, ...prev.historial] }));
+            showToast('Evolutivo registrado legalmente');
+        }
     };
 
     const handleUpdateNote = async (id: string, data: { subjetivo: string; objetivo: string; analisis: string; plan: string; eva: number; fecha?: string; especialidad?: string }) => {
@@ -305,13 +209,13 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
     // ── Handlers alergias ──────────────────────────────────────
     const handleAddAllergy = async () => {
         const nombre = newAllergyText.trim();
-        if (!nombre) return;
+        if (!paciente.numPac) return;
         const newA: PatientAllergy = {
-            id: crypto.randomUUID(), paciente_id: paciente.id, nombre, severidad: 'moderada'
+            id: crypto.randomUUID(), paciente_id: paciente.numPac, nombre, severidad: 'moderada'
         };
         setAllergies(prev => [...prev, newA]);
         setNewAllergyText('');
-        if (isSupabaseConfigured()) await upsertAllergy({ paciente_id: paciente.id, nombre, severidad: 'moderada' });
+        if (isSupabaseConfigured()) await upsertAllergy({ paciente_id: paciente.numPac, nombre, severidad: 'moderada' });
         showToast(`Alergia "${nombre}" añadida`);
     };
 
@@ -323,8 +227,9 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
 
     // ── Handlers medicación ────────────────────────────────────
     const handleAddMedication = async (med: Medicamento) => {
+        if (!paciente.numPac) return;
         const newMed: PatientMedication = {
-            id: crypto.randomUUID(), paciente_id: paciente.id,
+            id: crypto.randomUUID(), paciente_id: paciente.numPac,
             nombre: med.nombre, importante: med.importante,
             categoria: med.categoria, nota: med.nota,
         };
@@ -359,164 +264,169 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
 
     // Cargar panorámicas Romexis y fotos GDrive al montar
     useEffect(() => {
+        if (!paciente?.numPac) return;
+
         setLoadingRX(true);
-        getPatientPanoramicas(paciente.id)
+        getPatientPanoramicas(paciente.numPac)
             .then(p => { setPanoramicas(p); setPanoramicaIdx(0); })
             .finally(() => setLoadingRX(false));
 
         setLoadingFotos(true);
-        getPatientPhotos(paciente.id)
+        getPatientPhotos(paciente.numPac)
             .then(f => { setFotos(f); setFotoIdx(0); })
             .finally(() => setLoadingFotos(false));
-    }, [paciente.id]);
+    }, [paciente?.numPac]);
 
     // Edad calculada
-    const edad = new Date().getFullYear() - new Date(paciente.fechaNacimiento).getFullYear();
-    const ultimaVisita = paciente.historial[0]?.fecha ?? '—';
+    const edad = paciente ? new Date().getFullYear() - new Date(paciente.fechaNacimiento).getFullYear() : 0;
+    const ultimaVisita = paciente?.historial[0]?.fecha ?? '—';
 
 
     const renderHistorial = () => (
-        <div className="grid gap-3 animate-in fade-in duration-400" style={{ gridTemplateColumns: '26fr 44fr 30fr', gridTemplateRows: '1fr' }}>
+        <div className="grid gap-3 animate-in fade-in duration-400 h-[calc(100vh-240px)] min-h-[500px]" style={{ gridTemplateColumns: '70fr 30fr' }}>
 
-            {/* ── COL 1: HISTORIAL (estrecho, alto) ──────────────── */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden" style={{ height: 'calc(100vh - 340px)', minHeight: '520px' }}>
-                <div className="flex items-center justify-between px-3 py-2.5 bg-slate-50 border-b border-slate-100 flex-shrink-0">
-                    <div className="flex items-center gap-1.5">
-                        <Activity className="w-3.5 h-3.5 text-[#051650]" />
-                        <h3 className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Entradas Médicas</h3>
-                    </div>
-                    <span className="text-[9px] font-bold text-slate-400">{paciente.historial.length}</span>
-                </div>
-                <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
-                    {paciente.historial.length === 0 && (
-                        <div className="flex items-center justify-center h-full">
-                            <p className="text-sm text-slate-300 font-medium">Sin entradas registradas</p>
+            {/* ── COL 1: IZQUIERDA (Top: Historial, Bottom: SOAP) ──────────────── */}
+            <div className="flex flex-col gap-3 h-full min-h-0">
+                {/* ── TOP-LEFT: HISTORIAL (scroll) ──────────────── */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden flex-1 min-h-0">
+                    <div className="flex items-center justify-between px-3 py-2.5 bg-slate-50 border-b border-slate-100 flex-shrink-0">
+                        <div className="flex items-center gap-1.5 flex-1">
+                            <Activity className="w-3.5 h-3.5 text-[#051650]" />
+                            <h3 className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Entradas Médicas</h3>
+                            <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse ml-1" title="Datos Simulados"></span>
                         </div>
-                    )}
-                    {[...paciente.historial]
-                        .sort((a, b) => {
-                            const ta = a.timestamp ?? a.fecha ?? '';
-                            const tb = b.timestamp ?? b.fecha ?? '';
-                            return tb.localeCompare(ta);
-                        })
-                        .map((note) => {
-                            const cfg = getEsp(note.especialidad);
-                            const isOpen = expandedNoteId === note.id;
-                            const isEditing = editingNoteId === note.id;
-                            const fechaISO = (() => {
-                                try {
-                                    const d = new Date(note.fecha);
-                                    return isNaN(d.getTime()) ? new Date().toISOString().split('T')[0] : d.toISOString().split('T')[0];
-                                } catch { return new Date().toISOString().split('T')[0]; }
-                            })();
-                            return (
-                                <div key={note.id} className="border-l-2 transition-all" style={{ borderLeftColor: isOpen || isEditing ? '#051650' : '#e2e8f0' }}>
-                                    <div className="w-full flex items-center justify-between px-2 py-2 hover:bg-slate-50 transition-colors">
-                                        <button
-                                            onClick={() => { setExpandedNoteId(isOpen ? null : note.id); setEditingNoteId(null); }}
-                                            className="flex items-center gap-2 min-w-0 flex-1 text-left"
-                                        >
-                                            {/* Fecha tipo calendario */}
-                                            <div className="flex flex-col items-center justify-center w-9 h-9 bg-slate-100 rounded-lg flex-shrink-0 border border-slate-200">
-                                                <span className="text-xs font-black text-[#051650] leading-none">{note.fecha.split(' ')[0]}</span>
-                                                <span className="text-[8px] font-bold text-slate-400 uppercase">{note.fecha.split(' ')[1]}</span>
-                                            </div>
-                                            {/* Resumen */}
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex items-center gap-1 mb-0.5 flex-wrap">
-                                                    <span className={`text-[8px] font-black uppercase tracking-wider px-1 py-0.5 rounded border ${cfg.badge}`}>{note.especialidad}</span>
-                                                    {note.firmada && <CheckCircle className="w-2.5 h-2.5 text-emerald-500 flex-shrink-0" />}
-                                                    {note.eva > 0 && (
-                                                        <span className={`text-[8px] font-bold px-1 rounded ${note.eva >= 7 ? 'bg-red-50 text-red-600' : note.eva >= 4 ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-700'}`}>
-                                                            {note.eva}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <p className="text-[10px] text-slate-600 font-medium leading-snug line-clamp-2">{note.plan}</p>
-                                            </div>
-                                        </button>
-                                        <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
+                        <span className="text-[9px] font-bold text-slate-400">{paciente.historial.length}</span>
+                    </div>
+                    <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
+                        {paciente.historial.length === 0 && (
+                            <div className="flex items-center justify-center h-full">
+                                <p className="text-sm text-slate-300 font-medium">Sin entradas registradas</p>
+                            </div>
+                        )}
+                        {[...paciente.historial]
+                            .sort((a, b) => {
+                                const ta = a.timestamp ?? a.fecha ?? '';
+                                const tb = b.timestamp ?? b.fecha ?? '';
+                                return tb.localeCompare(ta);
+                            })
+                            .map((note) => {
+                                const cfg = getEsp(note.especialidad);
+                                const isOpen = expandedNoteId === note.id;
+                                const isEditing = editingNoteId === note.id;
+                                const fechaISO = (() => {
+                                    try {
+                                        const d = new Date(note.fecha);
+                                        return isNaN(d.getTime()) ? new Date().toISOString().split('T')[0] : d.toISOString().split('T')[0];
+                                    } catch { return new Date().toISOString().split('T')[0]; }
+                                })();
+                                return (
+                                    <div key={note.id} className="border-l-2 transition-all" style={{ borderLeftColor: isOpen || isEditing ? '#051650' : '#e2e8f0' }}>
+                                        <div className="w-full flex items-center justify-between px-2 py-2 hover:bg-slate-50 transition-colors">
                                             <button
-                                                onClick={() => { setEditingNoteId(isEditing ? null : note.id); setExpandedNoteId(null); }}
-                                                className={`w-5 h-5 flex items-center justify-center rounded transition-all ${isEditing ? 'bg-[#051650] text-white' : 'text-slate-400 hover:text-[#051650] hover:bg-slate-100'}`}
-                                                title="Editar entrada"
+                                                onClick={() => { setExpandedNoteId(isOpen ? null : note.id); setEditingNoteId(null); }}
+                                                className="flex items-center gap-2 min-w-0 flex-1 text-left"
                                             >
-                                                <Pencil className="w-2.5 h-2.5" />
+                                                {/* Fecha tipo calendario */}
+                                                <div className="flex flex-col items-center justify-center w-10 h-12 bg-slate-100 rounded-lg flex-shrink-0 border border-slate-200">
+                                                    <span className="text-sm font-black text-[#051650] leading-none">{note.fecha.split(' ')[0]}</span>
+                                                    <span className="text-[10px] font-bold text-slate-500 uppercase">{note.fecha.split(' ')[1]}</span>
+                                                    <span className="text-[9px] font-semibold text-slate-400">{note.fecha.split(' ')[2]}</span>
+                                                </div>
+                                                {/* Resumen */}
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center gap-1 mb-0.5 flex-wrap">
+                                                        <span className={`text-[10px] font-black uppercase tracking-wider px-1 py-0.5 rounded border ${cfg.badge}`}>{note.especialidad}</span>
+                                                        {note.firmada && <CheckCircle className="w-3 h-3 text-emerald-500 flex-shrink-0" />}
+                                                        {note.eva > 0 && (
+                                                            <span className={`text-[10px] font-bold px-1 rounded ${note.eva >= 7 ? 'bg-red-50 text-red-600' : note.eva >= 4 ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-700'}`}>
+                                                                {note.eva}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-[13px] text-slate-600 font-medium leading-snug line-clamp-2">{note.plan}</p>
+                                                </div>
                                             </button>
-                                            {isOpen
-                                                ? <ChevronUp className="w-3.5 h-3.5 text-slate-300 cursor-pointer" onClick={() => setExpandedNoteId(null)} />
-                                                : <ChevronDown className="w-3.5 h-3.5 text-slate-300 cursor-pointer" onClick={() => { setExpandedNoteId(note.id); setEditingNoteId(null); }} />}
+                                            <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
+                                                <button
+                                                    onClick={() => { setEditingNoteId(isEditing ? null : note.id); setExpandedNoteId(null); }}
+                                                    className={`w-5 h-5 flex items-center justify-center rounded transition-all ${isEditing ? 'bg-[#051650] text-white' : 'text-slate-400 hover:text-[#051650] hover:bg-slate-100'}`}
+                                                    title="Editar entrada"
+                                                >
+                                                    <Pencil className="w-2.5 h-2.5" />
+                                                </button>
+                                                {isOpen
+                                                    ? <ChevronUp className="w-3.5 h-3.5 text-slate-300 cursor-pointer" onClick={() => setExpandedNoteId(null)} />
+                                                    : <ChevronDown className="w-3.5 h-3.5 text-slate-300 cursor-pointer" onClick={() => { setExpandedNoteId(note.id); setEditingNoteId(null); }} />}
+                                            </div>
                                         </div>
+                                        {/* Modo edición inline */}
+                                        {isEditing && (
+                                            <div className="mx-2 mb-3">
+                                                <SOAPEditor
+                                                    onSave={(data) => handleUpdateNote(note.id, data)}
+                                                    alergiasPaciente={paciente.alergias}
+                                                    onCancel={() => setEditingNoteId(null)}
+                                                    initialData={{
+                                                        subjetivo: note.subjetivo,
+                                                        objetivo: note.objetivo,
+                                                        analisis: note.analisis,
+                                                        plan: note.plan,
+                                                        eva: note.eva,
+                                                        fecha: fechaISO,
+                                                        especialidad: note.especialidad,
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
+                                        {/* Contenido expandido SOAP solo lectura */}
+                                        {isOpen && !isEditing && (
+                                            <div className="grid grid-cols-2 gap-px bg-slate-100 text-[10px] mx-2 mb-2 rounded-lg overflow-hidden">
+                                                <div className="bg-white p-2">
+                                                    <span className="block text-[8px] font-black text-blue-600 uppercase tracking-widest mb-0.5">S</span>
+                                                    <p className="text-slate-600 leading-relaxed">{note.subjetivo}</p>
+                                                </div>
+                                                <div className="bg-white p-2">
+                                                    <span className="block text-[8px] font-black text-orange-600 uppercase tracking-widest mb-0.5">O</span>
+                                                    <p className="text-slate-600 leading-relaxed">{note.objetivo}</p>
+                                                </div>
+                                                <div className="bg-white p-2">
+                                                    <span className="block text-[8px] font-black text-emerald-700 uppercase tracking-widest mb-0.5">A</span>
+                                                    <p className="text-slate-600 leading-relaxed">{note.analisis}</p>
+                                                </div>
+                                                <div className="bg-[#051650] p-2">
+                                                    <span className="block text-[8px] font-black text-white/60 uppercase tracking-widest mb-0.5">P</span>
+                                                    <p className="text-white font-medium leading-relaxed">{note.plan}</p>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                    {/* Modo edición inline */}
-                                    {isEditing && (
-                                        <div className="mx-2 mb-3">
-                                            <SOAPEditor
-                                                onSave={(data) => handleUpdateNote(note.id, data)}
-                                                alergiasPaciente={paciente.alergias}
-                                                onCancel={() => setEditingNoteId(null)}
-                                                initialData={{
-                                                    subjetivo: note.subjetivo,
-                                                    objetivo: note.objetivo,
-                                                    analisis: note.analisis,
-                                                    plan: note.plan,
-                                                    eva: note.eva,
-                                                    fecha: fechaISO,
-                                                    especialidad: note.especialidad,
-                                                }}
-                                            />
-                                        </div>
-                                    )}
-                                    {/* Contenido expandido SOAP solo lectura */}
-                                    {isOpen && !isEditing && (
-                                        <div className="grid grid-cols-2 gap-px bg-slate-100 text-[10px] mx-2 mb-2 rounded-lg overflow-hidden">
-                                            <div className="bg-white p-2">
-                                                <span className="block text-[8px] font-black text-blue-600 uppercase tracking-widest mb-0.5">S</span>
-                                                <p className="text-slate-600 leading-relaxed">{note.subjetivo}</p>
-                                            </div>
-                                            <div className="bg-white p-2">
-                                                <span className="block text-[8px] font-black text-orange-600 uppercase tracking-widest mb-0.5">O</span>
-                                                <p className="text-slate-600 leading-relaxed">{note.objetivo}</p>
-                                            </div>
-                                            <div className="bg-white p-2">
-                                                <span className="block text-[8px] font-black text-emerald-700 uppercase tracking-widest mb-0.5">A</span>
-                                                <p className="text-slate-600 leading-relaxed">{note.analisis}</p>
-                                            </div>
-                                            <div className="bg-[#051650] p-2">
-                                                <span className="block text-[8px] font-black text-white/60 uppercase tracking-widest mb-0.5">P</span>
-                                                <p className="text-white font-medium leading-relaxed">{note.plan}</p>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-
+                                );
+                            })}
+                    </div>
+                    {/* IA DENTAL al pie */}
+                    <div className="border-t border-slate-100 bg-[#051650] px-3 py-2 flex items-center gap-2 flex-shrink-0">
+                        <Brain className="w-3.5 h-3.5 text-blue-300 flex-shrink-0" />
+                        <p className="text-[9px] text-blue-200 font-medium leading-tight flex-1 truncate italic">
+                            {saraTyped.slice(0, 70)}{saraTyped.length > 70 ? '…' : ''}
+                        </p>
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+                    </div>
                 </div>
-                {/* IA DENTAL al pie */}
-                <div className="border-t border-slate-100 bg-[#051650] px-3 py-2 flex items-center gap-2 flex-shrink-0">
-                    <Brain className="w-3.5 h-3.5 text-blue-300 flex-shrink-0" />
-                    <p className="text-[9px] text-blue-200 font-medium leading-tight flex-1 truncate italic">
-                        {saraTyped.slice(0, 70)}{saraTyped.length > 70 ? '…' : ''}
-                    </p>
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+
+                {/* ── BOTTOM-LEFT: EDITOR SOAP (50%, sin scroll) ──────────────── */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
+                    <SOAPEditor onSave={handleSaveNote} alergiasPaciente={paciente.alergias} />
                 </div>
             </div>
 
-            {/* ── COL 2: EDITOR SOAP (amplio, toda la altura) ────── */}
-            <div style={{ height: 'calc(100vh - 340px)', minHeight: '520px' }} className="overflow-y-auto">
-                <SOAPEditor onSave={handleSaveNote} alergiasPaciente={paciente.alergias} />
-            </div>
-
-            {/* ── COL 3: RX + FOTOS apilados  ──────────────────────── */}
-            <div className="flex flex-col gap-3">
-
-                {/* PANORÁMICAS RX — compacto */}
-                <div className="bg-slate-900 rounded-xl overflow-hidden shadow-lg flex flex-col" style={{ height: '250px' }}>
+            {/* ── COL 2: DERECHA (Top: RX = Bottom: Fotos, 50/50) ──────────────── */}
+            <div className="flex flex-col gap-3 h-full min-h-0">
+                {/* ── TOP-RIGHT: RX (50%) ──────────────── */}
+                <div className="bg-slate-900 rounded-xl overflow-hidden shadow-lg flex flex-col flex-1 min-h-0">
                     <div className="flex items-center justify-between px-3 py-2 bg-slate-800/80 border-b border-slate-700/50 flex-shrink-0">
                         <div className="flex items-center gap-1.5">
                             <Camera className="w-3 h-3 text-slate-400" />
-                            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Panorámicas RX</span>
+                            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">RX</span>
                             {!isRomexisConfigured() && (
                                 <span className="text-[8px] font-bold text-amber-400 bg-amber-400/10 border border-amber-500/30 px-1 py-0.5 rounded">DEMO</span>
                             )}
@@ -524,7 +434,10 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
                         <span className="text-[9px] text-slate-500 font-semibold">{panoramicas[panoramicaIdx]?.dateLabel ?? ''}</span>
                     </div>
                     {/* Imagen principal */}
-                    <div className="flex-1 relative overflow-hidden cursor-zoom-in group">
+                    <div
+                        className="flex-1 relative overflow-hidden cursor-zoom-in group"
+                        onClick={() => panoramicas.length > 0 && setZoomImage(panoramicas[panoramicaIdx]?.url)}
+                    >
                         {loadingRX
                             ? <div className="w-full h-full flex items-center justify-center"><span className="w-5 h-5 border-2 border-slate-600 border-t-blue-400 rounded-full animate-spin" /></div>
                             : panoramicas.length === 0
@@ -559,12 +472,12 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
                     </div>
                 </div>
 
-                {/* FOTOS INTRAORALES — compacto */}
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col" style={{ height: '250px' }}>
+                {/* ── BOTTOM-RIGHT: FOTOS INTRAORALES ──────────────── */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
                     <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-100 flex-shrink-0">
                         <div className="flex items-center gap-1.5">
                             <Camera className="w-3 h-3 text-slate-500" />
-                            <span className="text-[9px] font-black text-slate-700 uppercase tracking-widest">Fotos Intraorales</span>
+                            <span className="text-[9px] font-black text-slate-700 uppercase tracking-widest">Fotos</span>
                             {!isGDriveConfigured() && (
                                 <span className="text-[8px] font-bold text-amber-500 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded">DEMO</span>
                             )}
@@ -572,7 +485,10 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
                         <span className="text-[9px] text-slate-400 font-semibold truncate max-w-[80px]">{fotos[fotoIdx]?.label}</span>
                     </div>
                     {/* Imagen principal */}
-                    <div className="flex-1 relative overflow-hidden cursor-zoom-in group bg-slate-100">
+                    <div
+                        className="flex-1 relative overflow-hidden cursor-zoom-in group bg-slate-100"
+                        onClick={() => fotos.length > 0 && setZoomImage(fotos[fotoIdx]?.url)}
+                    >
                         {loadingFotos
                             ? <div className="w-full h-full flex items-center justify-center"><span className="w-5 h-5 border-2 border-slate-200 border-t-blue-400 rounded-full animate-spin" /></div>
                             : fotos.length === 0
@@ -607,7 +523,6 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
                         </label>
                     </div>
                 </div>
-
             </div>
         </div>
     );
@@ -617,15 +532,57 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
 
     const renderContent = () => {
         switch (activeSubArea) {
+            case 'Odontograma 3D':
             case 'Odontograma': return <Odontograma onSuggestionUpdate={() => { }} />;
+            case 'Sondaje Periodontal':
             case 'Periodoncia': return <Periodontograma />;
+            case 'Cuenta Corriente':
             case 'Económica':
             case 'Presupuestos': return <Economica />;
+            case 'Documentos y Consentimientos':
             case 'Documentos': return <Documentos onDocumentSigned={handleDocumentSigned} />;
+            case 'Historia Clínica':
             case 'Historial Clínico':
             default: return renderHistorial();
         }
     };
+
+    // ── Empty state: no patient selected yet ─────────────────────────────────
+    if (!paciente) {
+        return (
+            <>
+                <div className="flex-1 flex flex-col items-center justify-center gap-6 min-h-[60vh]">
+                    <div className="w-20 h-20 rounded-2xl bg-[#051650]/5 flex items-center justify-center">
+                        <UserPlus className="w-10 h-10 text-[#051650]/40" />
+                    </div>
+                    <div className="text-center max-w-xs">
+                        <h2 className="text-[15px] font-black text-slate-700 uppercase tracking-wider">Ningún paciente seleccionado</h2>
+                        <p className="text-[12px] text-slate-400 mt-1">Busca por nombre, apellidos, Nº paciente o teléfono para abrir su ficha clínica.</p>
+                    </div>
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => { setSearchInitialView('search'); setIsSearchOpen(true); }}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-[#051650] text-white rounded-xl text-[12px] font-black uppercase tracking-wider hover:bg-[#051650]/90 transition-all shadow-lg shadow-[#051650]/20"
+                        >
+                            <Search className="w-4 h-4" /> Buscar Paciente
+                        </button>
+                        <button
+                            onClick={() => { setSearchInitialView('create'); setIsSearchOpen(true); }}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-[12px] font-black uppercase tracking-wider hover:bg-slate-50 transition-all shadow-sm"
+                        >
+                            <UserPlus className="w-4 h-4" /> Nuevo Paciente
+                        </button>
+                    </div>
+                </div>
+                <PatientSearchModal
+                    isOpen={isSearchOpen}
+                    onClose={() => setIsSearchOpen(false)}
+                    onSelect={(p) => { setPaciente(p); setIsSearchOpen(false); }}
+                    initialView={searchInitialView}
+                />
+            </>
+        );
+    }
 
     return (
         <div className="flex flex-col gap-4">
@@ -791,9 +748,9 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
                 <div className="px-6 py-4 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
                     {/* Avatar + datos */}
                     <div className="flex items-center gap-4">
-                        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-[#051650] to-blue-700 text-white flex flex-col items-center justify-center shadow-md flex-shrink-0">
-                            <span className="text-[9px] font-bold text-blue-300 uppercase tracking-widest leading-none">#HC</span>
-                            <span className="text-sm font-black leading-tight">{paciente.id}</span>
+                        <div className="h-14 px-3 rounded-xl bg-gradient-to-br from-[#051650] to-blue-700 text-white flex flex-col items-center justify-center shadow-md flex-shrink-0 min-w-[56px]">
+                            <span className="text-[9px] font-bold text-blue-300 uppercase tracking-widest leading-none mb-0.5">#NUMPAC</span>
+                            <span className="text-[13px] font-black leading-tight tracking-tight whitespace-nowrap">{paciente.numPac}</span>
                         </div>
                         <div>
                             <div className="flex items-center gap-2 flex-wrap">
@@ -844,6 +801,53 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
 
             {/* ── CONTENIDO ───────────────────────────────────────────── */}
             <div>{renderContent()}</div>
+
+            {/* ── MODAL DE ZOOM MEJORADO ────────────────────────────────── */}
+            {zoomImage && (
+                <div
+                    className="fixed inset-0 z-[9999] bg-slate-900/98 flex flex-col items-center justify-center p-2 sm:p-4 animate-in fade-in duration-300 backdrop-blur-md"
+                    onClick={() => setZoomImage(null)}
+                >
+                    {/* Botones de acción arriba */}
+                    <div className="absolute top-4 right-4 flex items-center gap-3 z-10">
+                        <button
+                            title="Abrir en nueva ventana"
+                            className="p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all group active:scale-95 flex items-center gap-2"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(zoomImage, '_blank', 'noopener,noreferrer');
+                            }}
+                        >
+                            <ExternalLink className="w-5 h-5" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest hidden sm:inline">Nueva Ventana</span>
+                        </button>
+                        <button
+                            title="Cerrar"
+                            className="p-3 bg-rose-500/80 hover:bg-rose-600 rounded-full text-white transition-all group active:scale-95"
+                            onClick={(e) => { e.stopPropagation(); setZoomImage(null); }}
+                        >
+                            <X className="w-6 h-6" />
+                        </button>
+                    </div>
+
+                    <div
+                        className="relative w-full h-full max-w-[98vw] max-h-[96vh] flex items-center justify-center animate-in zoom-in duration-300"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <img
+                            src={zoomImage}
+                            className="max-w-full max-h-full rounded-lg shadow-2xl border border-white/5 object-contain selection:bg-none"
+                            alt="Zoom"
+                        />
+                    </div>
+
+                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 bg-black/40 backdrop-blur-md rounded-full border border-white/10">
+                        <p className="text-[10px] text-white/60 font-medium tracking-widest uppercase flex items-center gap-2">
+                            <Maximize2 className="w-3 h-3" /> Click fuera para cerrar o usa el botón superior
+                        </p>
+                    </div>
+                </div>
+            )}
 
             <PatientSearchModal
                 isOpen={isSearchOpen}

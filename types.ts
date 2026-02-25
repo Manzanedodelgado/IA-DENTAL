@@ -38,7 +38,8 @@ export interface SOAPNote {
 }
 
 export interface Paciente {
-    id: string;
+    numPac: string;
+    idPac?: number;         // IdPac interno GELITE — para queries en DCitas/PRESUTTO
     nombre: string;
     apellidos: string;
     dni: string;
@@ -54,12 +55,16 @@ export interface Paciente {
 
 // --- 1.2 AGENDA SEMÁNTICA ---
 export type TratamientoCategoria =
-    | 'Cirugía'   // Rojo: Alta rentabilidad/tensión
-    | 'Higiene'   // Verde: Mantenimiento
-    | 'Ortodoncia'// Azul: Volumen masivo
-    | 'Diagnostico' // Gris: Entrada flujo caja
-    | 'Urgencia'  // Amarillo: No planificada
-    | 'Protesis'; // Morado: Laboratorio
+    | 'Cirugía'
+    | 'Implante'
+    | 'Endodoncia'
+    | 'Higiene'
+    | 'Ortodoncia'
+    | 'Diagnostico'
+    | 'Urgencia'
+    | 'Protesis'
+    | 'Conservadora'
+    | 'Periodoncia';
 
 export type EstadoCita =
     | 'planificada' // Borde punteado
@@ -68,12 +73,15 @@ export type EstadoCita =
     | 'gabinete'    // Saturación aumentada
     | 'finalizada'  // Semitransparente
     | 'fallada'     // No-Show
+    | 'anulada'     // Sql: IdSitC 1
+    | 'cancelada'   // Sql: IdSitC 8
+    | 'desconocido'
     | 'bloqueo_bio'; // Trama rayada (1.5)
 
 export interface Cita {
     id: string;
     gabinete: string;
-    pacienteId: string;
+    pacienteNumPac: string;
     nombrePaciente: string;
     horaInicio: string; // HH:MM
     duracionMinutos: number;

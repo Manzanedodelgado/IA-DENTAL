@@ -197,14 +197,27 @@ const SOAPEditor: React.FC<SOAPEditorProps> = ({
             : 'bg-[#051650] hover:bg-blue-800';
 
     return (
-        <form onSubmit={handleSave} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <form onSubmit={handleSave} className="flex flex-col h-full bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             {/* Header */}
-            <div className="bg-slate-50 border-b border-slate-200 px-5 py-3 flex items-center justify-between flex-wrap gap-2">
+            <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center justify-between flex-wrap gap-2 shrink-0">
                 <div className="flex items-center gap-2">
                     <Stethoscope className="w-4 h-4 text-[#051650]" />
                     <h3 className="text-xs font-black uppercase tracking-widest text-[#051650]">
-                        {initialData ? 'Editar Evolutivo Clínico' : 'Nuevo Evolutivo Clínico'} — SOAP
+                        {initialData ? 'Editar Evolutivo' : 'Nuevo Evolutivo'}
                     </h3>
+                    {/* Botón escucha activa reubicado y minimalista */}
+                    <button
+                        type="button"
+                        onClick={() => listenState === 'listening' ? stopListening() : startListening()}
+                        disabled={listenState === 'analyzing'}
+                        className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ml-1 ${listenBg}`}
+                        title="IA Dental — Escucha Activa"
+                    >
+                        {listenIcon}
+                    </button>
+                    {listenState === 'listening' && <span className="text-[10px] text-red-500 font-bold animate-pulse">Escuchando... {String(Math.floor(listenSec / 60)).padStart(2, '0')}:{String(listenSec % 60).padStart(2, '0')}</span>}
+                    {listenState === 'analyzing' && <span className="text-[10px] text-amber-500 font-bold">Analizando...</span>}
+                    {listenState === 'done' && <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />}
                 </div>
                 <div className="flex items-center gap-3">
                     {/* Fecha */}
@@ -222,149 +235,91 @@ const SOAPEditor: React.FC<SOAPEditorProps> = ({
                         <select
                             value={nota.especialidad}
                             onChange={e => setNota({ ...nota, especialidad: e.target.value })}
-                            className="appearance-none bg-white border border-slate-200 text-xs font-bold rounded-lg pl-3 pr-7 py-1.5 outline-none text-slate-600 uppercase cursor-pointer hover:border-[#051650] transition-all"
+                            className="appearance-none bg-white border border-slate-200 text-xs font-bold rounded-lg pl-3 pr-7 py-1 outline-none text-slate-600 uppercase cursor-pointer hover:border-[#051650] transition-all"
                         >
                             {ESPECIALIDADES.map(e => <option key={e} value={e}>{e}</option>)}
                         </select>
-                        <ChevronDown className="w-3 h-3 text-slate-400 absolute right-2 top-2 pointer-events-none" />
+                        <ChevronDown className="w-3 h-3 text-slate-400 absolute right-2 top-1.5 pointer-events-none" />
                     </div>
                 </div>
             </div>
 
-            <div className="p-5 space-y-4">
-                {/* Alerta alergias */}
-                {alergiasPaciente.length > 0 && (
-                    <div className="bg-red-50 border border-red-200 p-3 rounded-lg flex items-center gap-3">
-                        <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
-                        <p className="text-sm font-bold text-red-700">
-                            ⚠ Alergias activas: {alergiasPaciente.join(', ')}
-                        </p>
-                    </div>
-                )}
-
-                {/* Botón escucha activa */}
-                <div className="flex items-center gap-4 p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
-                    <button
-                        type="button"
-                        onClick={() => listenState === 'listening' ? stopListening() : startListening()}
-                        disabled={listenState === 'analyzing'}
-                        className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg transition-all flex-shrink-0 ${listenBg}`}
-                    >
-                        {listenIcon}
-                    </button>
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                            <Brain className="w-3.5 h-3.5 text-[#051650]" />
-                            <span className="text-xs font-black text-slate-700 uppercase tracking-wider">IA Dental — Escucha Activa</span>
-                            {listenState === 'listening' && (
-                                <span className="text-xs font-bold text-red-500 tabular-nums">
-                                    {String(Math.floor(listenSec / 60)).padStart(2, '0')}:{String(listenSec % 60).padStart(2, '0')}
-                                </span>
-                            )}
-                            {listenState === 'done' && (
-                                <span className="flex items-center gap-1 text-xs font-bold text-emerald-600">
-                                    <CheckCircle className="w-3 h-3" /> Campos completados
-                                </span>
-                            )}
-                        </div>
-                        {listenState === 'idle' && (
-                            <p className="text-xs text-slate-400 font-medium mt-0.5">Pulsa el micrófono para que IA DENTAL transcriba y analice la conversación</p>
-                        )}
-                        {listenState === 'listening' && (
-                            <p className="text-xs text-red-500 font-medium mt-0.5 truncate">{transcript || 'Escuchando...'}</p>
-                        )}
-                        {listenState === 'analyzing' && (
-                            <p className="text-xs text-amber-600 font-medium mt-0.5">IA Dental procesando la conversación...</p>
-                        )}
-                        {listenState === 'done' && transcript && (
-                            <p className="text-[10px] text-slate-400 font-medium mt-0.5 truncate italic">"{transcript.slice(0, 100)}..."</p>
-                        )}
-                    </div>
-                    {listenState !== 'idle' && (
-                        <button
-                            type="button"
-                            onClick={() => { setListenState('idle'); setTranscript(''); recognitionRef.current?.stop(); }}
-                            className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 transition-all"
-                        >
-                            <X className="w-3.5 h-3.5 text-slate-500" />
-                        </button>
-                    )}
-                </div>
+            <div className="p-3 pb-2 flex-1 flex flex-col gap-3 min-h-0 overflow-y-auto custom-scrollbar">
 
                 {/* Campos SOAP */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3 flex-1 min-h-0">
                     {/* S */}
-                    <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                            <label className="text-xs font-black text-blue-600 uppercase tracking-wider flex items-center gap-1.5">
-                                <span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> S — Subjetivo
+                    <div className="flex flex-col min-h-0">
+                        <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] font-black text-blue-600 uppercase tracking-wider flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-blue-500" /> S — Subjetivo
                             </label>
-                            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-full px-2.5 py-1">
-                                <span className="text-xs font-bold text-slate-500">EVA:</span>
+                            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-full px-2 py-0.5">
+                                <span className="text-[9px] font-bold text-slate-500">EVA:</span>
                                 <input
                                     type="number" min={0} max={10}
                                     value={nota.eva}
                                     onChange={e => setNota({ ...nota, eva: parseInt(e.target.value) || 0 })}
-                                    className="w-7 bg-transparent text-sm font-black text-[#051650] outline-none text-center"
+                                    className="w-5 bg-transparent text-[10px] font-black text-[#051650] outline-none text-center"
                                 />
-                                <span className="text-xs text-slate-400">/10</span>
+                                <span className="text-[9px] text-slate-400">/10</span>
                             </div>
                         </div>
-                        <textarea rows={4} value={nota.subjetivo}
+                        <textarea value={nota.subjetivo}
                             onChange={e => setNota({ ...nota, subjetivo: e.target.value })}
-                            className={textAreaCls} placeholder="Motivo de consulta, palabras del paciente..." />
+                            className={`${textAreaCls} flex-1 min-h-[50px] text-xs`} placeholder="Motivo de consulta, palabras del paciente..." />
                     </div>
 
                     {/* O */}
-                    <div>
-                        <label className="text-xs font-black text-orange-600 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
-                            <span className="w-2.5 h-2.5 rounded-full bg-orange-500" /> O — Objetivo
+                    <div className="flex flex-col min-h-0">
+                        <label className="text-[10px] font-black text-orange-600 uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                            <span className="w-2 h-2 rounded-full bg-orange-500" /> O — Objetivo
                         </label>
-                        <textarea rows={4} value={nota.objetivo}
+                        <textarea value={nota.objetivo}
                             onChange={e => setNota({ ...nota, objetivo: e.target.value })}
-                            className={textAreaCls} placeholder="Hallazgos físicos, pruebas, radiografías..." />
+                            className={`${textAreaCls} flex-1 min-h-[50px] text-xs`} placeholder="Hallazgos físicos, pruebas, radiografías..." />
                     </div>
 
                     {/* A */}
-                    <div>
-                        <label className="text-xs font-black text-emerald-700 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
-                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> A — Análisis
+                    <div className="flex flex-col min-h-0">
+                        <label className="text-[10px] font-black text-emerald-700 uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500" /> A — Análisis
                         </label>
-                        <textarea rows={4} value={nota.analisis}
+                        <textarea value={nota.analisis}
                             onChange={e => setNota({ ...nota, analisis: e.target.value })}
-                            className={textAreaCls} placeholder="Juicio clínico y pronóstico..." />
+                            className={`${textAreaCls} flex-1 min-h-[50px] text-xs`} placeholder="Juicio clínico y pronóstico..." />
                     </div>
 
                     {/* P */}
-                    <div>
-                        <label className="text-xs font-black text-[#051650] uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
-                            <span className="w-2.5 h-2.5 rounded-full bg-[#051650]" /> P — Plan
+                    <div className="flex flex-col min-h-0">
+                        <label className="text-[10px] font-black text-[#051650] uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                            <span className="w-2 h-2 rounded-full bg-[#051650]" /> P — Plan
                         </label>
-                        <textarea rows={4} value={nota.plan}
+                        <textarea value={nota.plan}
                             onChange={e => setNota({ ...nota, plan: e.target.value })}
-                            className={textAreaCls} placeholder="Tratamiento ejecutado, medicación, instrucciones..." />
+                            className={`${textAreaCls} flex-1 min-h-[50px] text-xs`} placeholder="Tratamiento ejecutado, medicación, instrucciones..." />
                     </div>
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                    <p className="text-xs text-slate-500 font-medium italic">
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100 shrink-0 mt-auto">
+                    <p className="text-[9px] text-slate-500 font-medium italic">
                         El registro se bloquea legalmente 24h tras la firma electrónica.
                     </p>
                     <div className="flex items-center gap-2">
                         {onCancel && (
                             <button type="button" onClick={onCancel}
-                                className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-black uppercase text-slate-500 hover:bg-slate-50 transition-all">
+                                className="px-3 py-1.5 border border-slate-200 rounded-lg text-[9px] font-black uppercase text-slate-500 hover:bg-slate-50 transition-all">
                                 Cancelar
                             </button>
                         )}
                         <button
                             type="submit" disabled={saving}
-                            className="flex items-center gap-2 bg-[#051650] text-white px-6 py-2.5 rounded-lg font-black uppercase text-xs tracking-wider shadow-lg hover:bg-blue-900 active:scale-95 transition-all disabled:opacity-60"
+                            className="flex items-center gap-1.5 bg-[#051650] text-white px-4 py-1.5 rounded-lg font-black uppercase text-[10px] tracking-wider shadow-md hover:bg-blue-900 active:scale-95 transition-all disabled:opacity-60"
                         >
                             {saving
-                                ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Firmando...</>
-                                : <><Save className="w-3.5 h-3.5" /> {initialData ? 'Guardar cambios' : 'Firmar evolutivo'}</>
+                                ? <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Firmando...</>
+                                : <><Save className="w-3 h-3" /> {initialData ? 'Guardar' : 'Firmar'}</>
                             }
                         </button>
                     </div>

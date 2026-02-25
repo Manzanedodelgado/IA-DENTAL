@@ -15,12 +15,7 @@ export const navigationItems: MenuItem[] = [
         name: 'Agenda',
         icon: 'calendar_today',
         title: 'Agenda Clínica',
-        children: [
-            { name: 'Semana Completa', icon: 'view_week' },
-            { name: 'Jornada de Hoy', icon: 'view_day' },
-            { name: 'Gestión de Citas', icon: 'edit_calendar' },
-            { name: 'Lista de Espera', icon: 'hourglass_top' },
-        ]
+        children: []
     },
     {
         name: 'Pacientes',
@@ -36,13 +31,24 @@ export const navigationItems: MenuItem[] = [
         ]
     },
     {
+        name: 'Whatsapp',
+        icon: 'chat',
+        title: 'Centro de Mensajería',
+        children: [
+            { name: 'Conversaciones', icon: 'inbox' },
+            { name: 'Agenda de Contactos', icon: 'contacts' },
+        ]
+    },
+    {
         name: 'IA & Automatización',
         icon: 'psychology',
         title: 'Cerebro Digital',
         children: [
             { name: 'Asistente Sara ✦', icon: 'smart_toy' },
-            { name: 'Mensajes y Plantillas', icon: 'fact_check' },
-            { name: 'Flujos Automáticos', icon: 'rule' },
+            { name: 'Automatizaciones', icon: 'bolt' },
+            { name: 'Flujos Conversacionales', icon: 'account_tree' },
+            { name: 'Editor', icon: 'edit_note' },
+            { name: 'Plantillas', icon: 'fact_check' },
         ]
     },
     {
@@ -65,15 +71,6 @@ export const navigationItems: MenuItem[] = [
             { name: 'Banco y Conciliación', icon: 'account_balance' },
             { name: 'Declaraciones Fiscales', icon: 'request_page' },
             { name: 'Informes de Gestión', icon: 'analytics' },
-        ]
-    },
-    {
-        name: 'Whatsapp',
-        icon: 'chat',
-        title: 'Centro de Mensajería',
-        children: [
-            { name: 'Conversaciones', icon: 'inbox' },
-            { name: 'Agenda de Contactos', icon: 'contacts' },
         ]
     },
 ];

@@ -120,6 +120,7 @@ const Dashboard: React.FC = () => {
                             <h3 className="text-sm font-bold text-slate-800 dark:text-white tracking-tight flex items-center gap-2">
                                 <Flame className="w-4 h-4 text-rose-500" />
                                 Análisis de Ocupación por Slots
+                                <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Datos Simulados"></span>
                             </h3>
                         </div>
                         <div className="flex flex-wrap items-center gap-3 p-1.5 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
@@ -175,7 +176,10 @@ const Dashboard: React.FC = () => {
                                     <Zap className="w-5 h-5 text-white" />
                                 </div>
                                 <div>
-                                    <h3 className="text-md font-bold tracking-tight leading-none uppercase">Sara Intelligence</h3>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="text-md font-bold tracking-tight leading-none uppercase">Sara Intelligence</h3>
+                                        <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Datos Simulados"></span>
+                                    </div>
                                     <Badge variant="blue" className="!bg-blue-800 !text-blue-100 px-1.5 py-0 rounded-sm mt-1">v4.2 Active</Badge>
                                 </div>
                             </div>
@@ -199,6 +203,7 @@ const Dashboard: React.FC = () => {
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
                                 <Target className="w-4 h-4" /> AI Insights Board
+                                <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Datos Simulados"></span>
                             </h3>
                             <div className="w-2 h-2 rounded-full bg-red-500"></div>
                         </div>

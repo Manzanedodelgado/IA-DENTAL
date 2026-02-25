@@ -1,107 +1,116 @@
 // ─────────────────────────────────────────────────────────────────
 //  services/pacientes.service.ts
-//  CRUD completo de pacientes contra Supabase.
-//  Si Supabase no está configurado → devuelve datos vacíos (modo demo).
+//  CRUD completo de pacientes contra Supabase → tabla "Pacientes".
+//  Búsqueda por NumPac, Nombre, Apellidos, NIF, TelMovil.
 // ─────────────────────────────────────────────────────────────────
 import { Paciente } from '../types';
 import { dbSelect, dbInsert, dbUpdate, dbDelete, isDbConfigured } from './db';
 
-// Tipo interno de BD (snake_case)
+// Tipo interno de BD (PascalCase heredado de GELITE)
 interface PacienteRow {
-    id: string;
-    numero_historia?: number;
-    nombre: string;
-    apellidos: string;
-    dni?: string;
-    telefono?: string;
-    email?: string;
-    fecha_nacimiento?: string;
-    tutor?: string;
-    deuda?: boolean;
-    consentimientos_firmados?: boolean;
-    observaciones?: string;
-    foto_url?: string;
-    created_at?: string;
+    IdPac?: number;
+    NumPac?: string;
+    Nombre?: string;
+    Apellidos?: string;
+    NIF?: string;
+    Tel1?: string;
+    Tel2?: string;
+    TelMovil?: string;
+    Email?: string;
+    FecNacim?: string;
+    Direccion?: string;
+    CP?: string;
+    Observaciones?: string;
+    Notas?: string;
 }
 
 /** Convierte fila de BD al tipo Paciente del frontend */
 const rowToPaciente = (row: PacienteRow): Paciente => ({
-    id: row.id,
-    nombre: row.nombre,
-    apellidos: row.apellidos,
-    dni: row.dni ?? '',
-    telefono: row.telefono ?? '',
-    fechaNacimiento: row.fecha_nacimiento ?? '',
-    tutor: row.tutor,
-    alergias: [],      // se cargan aparte via supabase.service.ts
+    numPac: row.NumPac ?? String(row.IdPac ?? ''),
+    idPac: row.IdPac,          // ← guardamos el IdPac GELITE para queries directas
+    nombre: row.Nombre ?? '',
+    apellidos: row.Apellidos ?? '',
+    dni: row.NIF ?? '',
+    telefono: row.TelMovil ?? row.Tel1 ?? row.Tel2 ?? '',
+    fechaNacimiento: row.FecNacim ?? '',
+    tutor: undefined,
+    alergias: [],
     medicacionActual: undefined,
-    deuda: row.deuda ?? false,
-    historial: [],     // se cargan aparte
-    consentimientosFirmados: row.consentimientos_firmados ?? false,
+    deuda: false,
+    historial: [],
+    consentimientosFirmados: false,
 });
 
-/** Convierte tipo Paciente al formato de BD */
 const pacienteToRow = (p: Partial<Paciente>): Partial<PacienteRow> => ({
-    nombre: p.nombre,
-    apellidos: p.apellidos,
-    dni: p.dni,
-    telefono: p.telefono,
-    fecha_nacimiento: p.fechaNacimiento,
-    tutor: p.tutor,
-    deuda: p.deuda,
-    consentimientos_firmados: p.consentimientosFirmados,
+    NumPac: p.numPac,
+    Nombre: p.nombre,
+    Apellidos: p.apellidos,
+    NIF: p.dni,
+    TelMovil: p.telefono,
+    FecNacim: p.fechaNacimiento,
+    Observaciones: p.tutor ? `Tutor: ${p.tutor}` : undefined,
 });
 
 // ── Búsqueda de pacientes ────────────────────────────────────────
 
 /**
- * Busca pacientes por texto (nombre, apellidos, DNI, teléfono).
- * Usa el índice trgm de Postgres vía query param `or`.
+ * Busca pacientes en la tabla "Pacientes" por:
+ *   NumPac, Nombre, Apellidos, NIF, TelMovil
+ * Soporta nombre+apellidos combinados (parte de cada campo).
  */
 export const searchPacientes = async (query: string): Promise<Paciente[]> => {
     if (!isDbConfigured()) return [];
+
     if (!query.trim()) {
-        // Sin query: devuelve los 20 más recientes
-        const rows = await dbSelect<PacienteRow>('pacientes', {
-            order: 'created_at.desc',
-            limit: '20',
+        // Sin query: devuelve los 30 primeros ordenados por apellidos
+        const rows = await dbSelect<PacienteRow>('Pacientes', {
+            order: 'Apellidos.asc,Nombre.asc',
+            limit: '30',
         });
         return rows.map(rowToPaciente);
     }
 
-    const q = query.trim().toLowerCase();
-    const rows = await dbSelect<PacienteRow>('pacientes', {
-        or: `nombre.ilike.*${q}*,apellidos.ilike.*${q}*,dni.ilike.*${q}*,telefono.ilike.*${q}*`,
-        order: 'apellidos.asc,nombre.asc',
-        limit: '30',
+    const q = query.trim();
+    // Build a broad OR covering all searchable fields
+    const filter = [
+        `NumPac.ilike.*${q}*`,
+        `Nombre.ilike.*${q}*`,
+        `Apellidos.ilike.*${q}*`,
+        `NIF.ilike.*${q}*`,
+        `TelMovil.ilike.*${q}*`,
+        `Tel1.ilike.*${q}*`,
+        `Tel2.ilike.*${q}*`,
+    ].join(',');
+
+    const rows = await dbSelect<PacienteRow>('Pacientes', {
+        or: filter,
+        order: 'Apellidos.asc,Nombre.asc',
+        limit: '50',
     });
     return rows.map(rowToPaciente);
 };
 
-/** Obtiene un paciente por su ID */
-export const getPaciente = async (id: string): Promise<Paciente | null> => {
+export const getPaciente = async (numPac: string): Promise<Paciente | null> => {
     if (!isDbConfigured()) return null;
-    const rows = await dbSelect<PacienteRow>('pacientes', { id: `eq.${id}` });
+    const rows = await dbSelect<PacienteRow>('Pacientes', { NumPac: `eq.${numPac}` });
     return rows[0] ? rowToPaciente(rows[0]) : null;
 };
 
-/** Crea un nuevo paciente y devuelve el objeto con ID asignado */
-export const createPaciente = async (p: Omit<Paciente, 'id' | 'historial'>): Promise<Paciente | null> => {
-    const row = await dbInsert<PacienteRow>('pacientes', pacienteToRow(p));
+export const createPaciente = async (p: Omit<Paciente, 'historial'>): Promise<Paciente | null> => {
+    const row = await dbInsert<PacienteRow>('Pacientes', pacienteToRow(p));
     return row ? rowToPaciente(row) : null;
 };
 
 /** Actualiza datos de un paciente existente */
 export const updatePaciente = async (
-    id: string,
-    updates: Partial<Omit<Paciente, 'id' | 'historial'>>
+    numPac: string,
+    updates: Partial<Omit<Paciente, 'historial'>>
 ): Promise<Paciente | null> => {
-    const row = await dbUpdate<PacienteRow>('pacientes', id, pacienteToRow(updates));
+    const row = await dbUpdate<PacienteRow>('Pacientes', numPac, pacienteToRow(updates), 'NumPac');
     return row ? rowToPaciente(row) : null;
 };
 
-/** Elimina un paciente (uso restringido, preferir desactivar) */
-export const deletePaciente = async (id: string): Promise<boolean> =>
-    dbDelete('pacientes', id);
+export const deletePaciente = async (numPac: string): Promise<boolean> =>
+    dbDelete('Pacientes', numPac, 'NumPac');
 
 export { isDbConfigured };

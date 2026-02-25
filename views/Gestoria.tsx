@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     TrendingUp,
     TrendingDown,
@@ -26,10 +26,19 @@ import {
     FileSpreadsheet,
     Activity,
     Banknote,
-    MoreHorizontal
+    MoreHorizontal,
+    Mail,
+    RefreshCw,
+    Paperclip,
+    ExternalLink,
+    Sparkles,
+    AlertTriangle,
+    X
 } from 'lucide-react';
 import { getFacturas, getMovimientosBanco, getGestoriaStats, FacturaUI, MovimientoBancoUI } from '../services/facturacion.service';
 import { isDbConfigured } from '../services/db';
+import { fetchInvoiceEmails, isGmailConfigured } from '../services/gmail.service';
+import { parseAllInvoiceEmails, type FacturaExtraida } from '../services/invoice-parser.service';
 
 interface StatCardProps {
     icon: React.ElementType;
@@ -66,7 +75,47 @@ interface GestoriaProps {
 }
 
 const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
-    const [activeTab, setActiveTab] = useState<'resumen' | 'facturacion' | 'banco' | 'impuestos' | 'informes'>('resumen');
+    const [activeTab, setActiveTab] = useState<'resumen' | 'facturacion' | 'gmail' | 'banco' | 'impuestos' | 'informes'>('resumen');
+
+    // ── Gmail invoice state ──────────────────────────────────────
+    const [gmailFacturas, setGmailFacturas] = useState<FacturaExtraida[]>([]);
+    const [gmailSyncing, setGmailSyncing] = useState(false);
+    const [gmailLastSync, setGmailLastSync] = useState<Date | null>(null);
+    const [gmailError, setGmailError] = useState<string | null>(null);
+    const [gmailSearch, setGmailSearch] = useState('');
+
+    const syncGmail = useCallback(async () => {
+        setGmailSyncing(true);
+        setGmailError(null);
+        try {
+            const emails = await fetchInvoiceEmails(90);
+            const parsed = await parseAllInvoiceEmails(emails);
+            setGmailFacturas(parsed);
+            setGmailLastSync(new Date());
+        } catch (e: unknown) {
+            setGmailError(e instanceof Error ? e.message : 'Error de sincronización');
+        } finally {
+            setGmailSyncing(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (activeTab === 'gmail' && gmailFacturas.length === 0 && !gmailSyncing) {
+            syncGmail();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab]);
+
+    const filteredGmailFacturas = gmailFacturas.filter(f => {
+        if (!gmailSearch) return true;
+        const q = gmailSearch.toLowerCase();
+        return f.proveedor.toLowerCase().includes(q)
+            || (f.numero_factura ?? '').toLowerCase().includes(q)
+            || f.concepto.toLowerCase().includes(q);
+    });
+
+    const toggleFacturaEstado = (id: string, estado: FacturaExtraida['estado']) =>
+        setGmailFacturas(prev => prev.map(f => f.gmail_message_id === id ? { ...f, estado } : f));
 
     useEffect(() => {
         if (!activeSubArea) return;
@@ -94,36 +143,14 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
     const [stats, setStats] = useState({ ingresosBrutos: '€42,850.00', facturasConteo: 142 });
 
     useEffect(() => {
-        // Initial Mock Data
-        const INITIAL_FACTURAS: FacturaUI[] = [
-            { id: '2024-FACT-001', name: 'Marta García López', date: 'Hoy, 12:45', base: '€1,200.00', total: '€1,200.00', status: 'Liquidado', tbai: 'Verificado', rawDate: new Date(), rawTotal: 1200 },
-            { id: '2024-FACT-002', name: 'Carlos Rubio Sanz', date: 'Ayer, 09:20', base: '€3,500.00', total: '€3,500.00', status: 'Pendiente', tbai: 'Enviando...', rawDate: new Date(), rawTotal: 3500 },
-            { id: '2023-FACT-891', name: 'Elena Martínez', date: '12 Feb 2024', base: '€850.00', total: '€850.00', status: 'Liquidado', tbai: 'Verificado', rawDate: new Date(), rawTotal: 850 },
-            { id: '2023-FACT-890', name: 'Juan Antonio M.', date: '11 Feb 2024', base: '€45.00', total: '€54.45', status: 'Impagado', tbai: 'Error', rawDate: new Date(), rawTotal: 54.45 },
-            { id: '2023-FACT-889', name: 'Sofía Valdés', date: '10 Feb 2024', base: '€2,100.00', total: '€2,100.00', status: 'Liquidado', tbai: 'Verificado', rawDate: new Date(), rawTotal: 2100 },
-        ];
-
-        const INITIAL_MOVs: MovimientoBancoUI[] = [
-            { desc: 'Transferencia REC: Marta García', date: 'Hoy, 10:15', amount: '+1,200.00', type: 'in', match: true },
-            { desc: 'Recibo Iberdrola S.A.', date: 'Ayer', amount: '-245.20', type: 'out', match: false },
-            { desc: 'Abono Tarjeta TPV: 2901-X', date: 'Ayer', amount: '+3,500.00', type: 'in', match: true },
-            { desc: 'Transferencia REC: Elena Martinez', date: 'Ayer', amount: '+850.00', type: 'in', match: true },
-            { desc: 'Comisión Mantenimiento', date: '12 Feb', amount: '-35.00', type: 'out', match: false },
-        ];
-
         if (isDbConfigured()) {
             getFacturas().then(data => {
                 if (data.length > 0) setFacturas(data);
-                else setFacturas(INITIAL_FACTURAS);
             });
             getMovimientosBanco().then(data => {
                 if (data.length > 0) setMovimientos(data);
-                else setMovimientos(INITIAL_MOVs);
             });
             getGestoriaStats().then(s => setStats(s));
-        } else {
-            setFacturas(INITIAL_FACTURAS);
-            setMovimientos(INITIAL_MOVs);
         }
     }, []);
     const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -131,10 +158,11 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
     const tabs = [
         { id: 'resumen', label: 'Resumen Global', icon: PieChart },
         { id: 'facturacion', label: 'Facturación', icon: Receipt },
+        { id: 'gmail', label: 'Facturas Email', icon: Mail, badge: gmailFacturas.filter(f => f.estado === 'pendiente').length || undefined },
         { id: 'banco', label: 'Banco y Conciliación', icon: ArrowLeftRight },
         { id: 'impuestos', label: 'Modelos Fiscales', icon: Scale },
         { id: 'informes', label: 'Informes', icon: FileSpreadsheet },
-    ];
+    ] as { id: string; label: string; icon: React.ElementType; badge?: number }[];
 
     return (
         <div className="space-y-10 pb-24">
@@ -163,7 +191,7 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as any)}
                         className={`
-                            flex items-center gap-3 px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap
+                            relative flex items-center gap-3 px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap
                             ${activeTab === tab.id
                                 ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xl scale-105'
                                 : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}
@@ -171,6 +199,11 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
                     >
                         <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? 'text-blue-600' : ''}`} />
                         {tab.label}
+                        {tab.badge && tab.badge > 0 ? (
+                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                                {tab.badge > 9 ? '9+' : tab.badge}
+                            </span>
+                        ) : null}
                     </button>
                 ))}
             </div>
@@ -224,7 +257,10 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
                             <div className="xl:col-span-2 bg-white dark:bg-slate-800 p-10 rounded-[2.5rem] border-2 border-[#051650] dark:border-slate-700 shadow-xl shadow-slate-200/50 relative overflow-hidden">
                                 <div className="flex justify-between items-center mb-10 relative z-10">
                                     <div>
-                                        <h3 className="text-2xl font-black text-[#051650] dark:text-white tracking-tight">Evolución de Tesorería</h3>
+                                        <h3 className="text-2xl font-black text-[#051650] dark:text-white tracking-tight flex items-center gap-2">
+                                            Evolución de Tesorería
+                                            <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Datos Simulados"></span>
+                                        </h3>
                                         <p className="text-sm font-medium text-slate-500 mt-1">Comparativa Ingresos vs Gastos Mensual</p>
                                     </div>
                                     <div className="flex gap-2">
@@ -261,7 +297,10 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
                                                 <ShieldCheck className="w-6 h-6 text-emerald-400" />
                                             </div>
                                             <div>
-                                                <h3 className="font-black text-xl tracking-tight">Sello Verifactu</h3>
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="font-black text-xl tracking-tight">Sello Verifactu</h3>
+                                                    <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Datos Simulados"></span>
+                                                </div>
                                                 <div className="flex items-center gap-2 mt-1">
                                                     <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
                                                     <span className="text-[10px] uppercase font-black text-emerald-400 tracking-widest">Activo y Legal</span>
@@ -412,6 +451,258 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
                     </div>
                 )}
 
+                {/* ── GMAIL INVOICE EXTRACTOR TAB ── */}
+                {activeTab === 'gmail' && (
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
+
+                        {/* Header: sync controls */}
+                        <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6 bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] border-2 border-[#051650] shadow-xl">
+                            <div className="flex items-start gap-5">
+                                <div className="p-4 bg-blue-50 rounded-2xl shrink-0">
+                                    <Mail className="w-7 h-7 text-blue-600" />
+                                </div>
+                                <div>
+                                    <h2 className="text-2xl font-black text-[#051650] dark:text-white tracking-tight">Facturas desde Gmail</h2>
+                                    <p className="text-sm text-slate-500 mt-1 font-medium">
+                                        <span className="font-black text-[#051650]">info@rubiogarciandental.com</span>
+                                        {' — '} Últimos 90 días
+                                    </p>
+                                    {gmailLastSync && (
+                                        <p className="text-[10px] text-slate-400 mt-1">
+                                            Última sincronización: {gmailLastSync.toLocaleTimeString('es-ES')}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-4 w-full xl:w-auto">
+                                {!isGmailConfigured() && (
+                                    <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 rounded-xl">
+                                        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                                        <span className="text-[10px] font-black text-amber-700 uppercase tracking-wide">Modo Demo</span>
+                                    </div>
+                                )}
+                                <button
+                                    onClick={syncGmail}
+                                    disabled={gmailSyncing}
+                                    className="flex items-center gap-3 px-8 py-3.5 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:shadow-2xl hover:shadow-blue-500/30 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                    <RefreshCw className={`w-4 h-4 ${gmailSyncing ? 'animate-spin' : ''}`} />
+                                    {gmailSyncing ? 'Sincronizando...' : 'Sincronizar Gmail'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Error banner */}
+                        {gmailError && (
+                            <div className="flex items-center gap-4 p-5 bg-rose-50 border border-rose-200 rounded-2xl">
+                                <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
+                                <p className="text-sm font-bold text-rose-700">{gmailError}</p>
+                                <button onClick={() => setGmailError(null)} className="ml-auto">
+                                    <X className="w-4 h-4 text-rose-400" />
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Stats row */}
+                        {gmailFacturas.length > 0 && (
+                            <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+                                {[
+                                    { label: 'Total emails', value: String(gmailFacturas.length), color: 'text-blue-600', bg: 'bg-blue-50' },
+                                    { label: 'Pendientes cruce', value: String(gmailFacturas.filter(f => f.estado === 'pendiente').length), color: 'text-amber-600', bg: 'bg-amber-50' },
+                                    { label: 'Cruzadas', value: String(gmailFacturas.filter(f => f.estado === 'cruzado').length), color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                                    {
+                                        label: 'Total detectado',
+                                        value: '€' + gmailFacturas.reduce((s, f) => s + (f.total ?? 0), 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                                        color: 'text-[#051650]',
+                                        bg: 'bg-slate-50'
+                                    },
+                                ].map((s, i) => (
+                                    <div key={i} className={`${s.bg} p-5 rounded-2xl border border-slate-100`}>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{s.label}</p>
+                                        <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Search bar */}
+                        <div className="relative">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                            <input
+                                type="text"
+                                value={gmailSearch}
+                                onChange={e => setGmailSearch(e.target.value)}
+                                placeholder="Buscar por proveedor, nº factura o concepto..."
+                                className="w-full pl-12 pr-6 py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
+                            />
+                        </div>
+
+                        {/* Invoice table */}
+                        <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] border-2 border-[#051650] shadow-xl overflow-hidden">
+
+                            {/* Credential setup notice when in demo mode */}
+                            {!isGmailConfigured() && (
+                                <div className="mx-8 mt-8 p-6 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl flex items-start gap-4">
+                                    <Sparkles className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
+                                    <div>
+                                        <p className="text-sm font-black text-amber-800 mb-1">Mostrando datos de demostración</p>
+                                        <p className="text-xs text-amber-700 font-medium leading-relaxed">
+                                            Para conectar Gmail real, añade en tu <code className="bg-amber-100 px-1 rounded">.env</code>:<br />
+                                            <code className="text-[10px]">VITE_GMAIL_SA_EMAIL</code>, <code className="text-[10px]">VITE_GMAIL_SA_PRIVATE_KEY</code>, <code className="text-[10px]">VITE_GMAIL_USER_EMAIL</code>
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead className="bg-slate-50 dark:bg-slate-700/30 text-[10px] uppercase font-black tracking-[0.2em] text-slate-400 border-b border-slate-200">
+                                        <tr>
+                                            <th className="px-8 py-5">Proveedor</th>
+                                            <th className="px-8 py-5">Nº Factura</th>
+                                            <th className="px-8 py-5">Fecha</th>
+                                            <th className="px-8 py-5 text-right">Base</th>
+                                            <th className="px-8 py-5 text-right">IVA</th>
+                                            <th className="px-8 py-5 text-right">Total</th>
+                                            <th className="px-8 py-5 text-center">Estado</th>
+                                            <th className="px-8 py-5"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                                        {gmailSyncing && (
+                                            <tr>
+                                                <td colSpan={8} className="px-8 py-16 text-center">
+                                                    <div className="flex flex-col items-center gap-4">
+                                                        <RefreshCw className="w-8 h-8 text-blue-400 animate-spin" />
+                                                        <p className="text-sm font-bold text-slate-400">Analizando emails y extrayendo facturas...</p>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {!gmailSyncing && filteredGmailFacturas.length === 0 && (
+                                            <tr>
+                                                <td colSpan={8} className="px-8 py-16 text-center">
+                                                    <Mail className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+                                                    <p className="text-sm font-bold text-slate-400">No se encontraron facturas</p>
+                                                    <button onClick={syncGmail} className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest">
+                                                        Sincronizar ahora
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {!gmailSyncing && filteredGmailFacturas.map((f) => (
+                                            <tr key={f.gmail_message_id} className="hover:bg-blue-50/20 transition-all group">
+                                                {/* Proveedor */}
+                                                <td className="px-8 py-5">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                                                            <Mail className="w-3.5 h-3.5 text-slate-400" />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm font-black text-[#051650] dark:text-white leading-none">{f.proveedor}</p>
+                                                            <p className="text-[10px] text-slate-400 mt-0.5 font-medium">{f.proveedor_email}</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+
+                                                {/* Nº Factura */}
+                                                <td className="px-8 py-5">
+                                                    {f.numero_factura ? (
+                                                        <span className="font-mono text-xs font-black text-blue-700 bg-blue-50 px-2 py-1 rounded-lg">{f.numero_factura}</span>
+                                                    ) : (
+                                                        <span className="text-[10px] text-slate-300 font-bold">—</span>
+                                                    )}
+                                                </td>
+
+                                                {/* Fecha */}
+                                                <td className="px-8 py-5">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-bold text-slate-700">
+                                                            {new Date(f.fecha_email).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                        </span>
+                                                        {f.tiene_adjunto && (
+                                                            <span className="flex items-center gap-1 text-[9px] font-black text-slate-400 uppercase mt-0.5">
+                                                                <Paperclip className="w-2.5 h-2.5" />{f.nombre_adjunto?.split('.').pop()?.toUpperCase()}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </td>
+
+                                                {/* Base */}
+                                                <td className="px-8 py-5 text-right">
+                                                    <span className="text-sm font-bold text-slate-500">
+                                                        {f.base_imponible !== null ? `€${f.base_imponible.toLocaleString('es-ES', { minimumFractionDigits: 2 })}` : '—'}
+                                                    </span>
+                                                </td>
+
+                                                {/* IVA */}
+                                                <td className="px-8 py-5 text-right">
+                                                    <span className="text-xs font-black text-slate-400">
+                                                        {f.iva_pct !== null ? `${f.iva_pct}%` : '—'}
+                                                    </span>
+                                                </td>
+
+                                                {/* Total */}
+                                                <td className="px-8 py-5 text-right">
+                                                    <span className="text-lg font-black text-[#051650] dark:text-white">
+                                                        {f.total !== null ? `€${f.total.toLocaleString('es-ES', { minimumFractionDigits: 2 })}` : '—'}
+                                                    </span>
+                                                </td>
+
+                                                {/* Estado */}
+                                                <td className="px-8 py-5 text-center">
+                                                    <div className={`mx-auto w-fit px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${f.estado === 'cruzado' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                                            f.estado === 'descartado' ? 'bg-slate-100 text-slate-400 border-slate-200' :
+                                                                'bg-amber-50 text-amber-600 border-amber-100 animate-pulse'
+                                                        }`}>
+                                                        {f.estado === 'cruzado' ? '✓ Cruzado' : f.estado === 'descartado' ? 'Descartado' : '⏳ Pendiente'}
+                                                    </div>
+                                                </td>
+
+                                                {/* Actions */}
+                                                <td className="px-8 py-5">
+                                                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                                        {f.estado !== 'cruzado' && (
+                                                            <button
+                                                                onClick={() => toggleFacturaEstado(f.gmail_message_id, 'cruzado')}
+                                                                className="px-3 py-1.5 bg-emerald-500 text-white rounded-xl text-[9px] font-black uppercase hover:bg-emerald-600 transition-all whitespace-nowrap"
+                                                                title="Marcar como cruzada con apunte bancario"
+                                                            >
+                                                                Cruzar
+                                                            </button>
+                                                        )}
+                                                        {f.estado !== 'descartado' && (
+                                                            <button
+                                                                onClick={() => toggleFacturaEstado(f.gmail_message_id, 'descartado')}
+                                                                className="p-1.5 hover:bg-slate-100 rounded-lg transition-all"
+                                                                title="Descartar"
+                                                            >
+                                                                <X className="w-3.5 h-3.5 text-slate-400" />
+                                                            </button>
+                                                        )}
+                                                        {f.enlace_gmail !== '#mock' && (
+                                                            <a
+                                                                href={f.enlace_gmail}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="p-1.5 hover:bg-blue-50 rounded-lg transition-all"
+                                                                title="Abrir en Gmail"
+                                                            >
+                                                                <ExternalLink className="w-3.5 h-3.5 text-blue-400" />
+                                                            </a>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {activeTab === 'banco' && (
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-10 animate-in fade-in slide-in-from-right-10 duration-700">
                         {/* High Fidelity Bank Interface */}
@@ -419,7 +710,10 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
                             <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] border-2 border-[#051650] dark:border-slate-700 shadow-xl overflow-hidden relative">
                                 <div className="flex justify-between items-start mb-10">
                                     <div>
-                                        <h3 className="text-2xl font-black text-[#051650] dark:text-white tracking-tight">Apuntes Bancarios</h3>
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="text-2xl font-black text-[#051650] dark:text-white tracking-tight">Apuntes Bancarios</h3>
+                                            <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Datos Simulados"></span>
+                                        </div>
                                         <p className="text-sm font-medium text-slate-500 mt-1">Conexión en streaming con Banco Santander</p>
                                     </div>
                                     <div className="p-4 bg-red-50 rounded-2xl">
@@ -464,7 +758,10 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
                                 <div className="absolute top-0 right-0 p-8">
                                     <Activity className="w-24 h-24 text-white/5" />
                                 </div>
-                                <h3 className="text-2xl font-black mb-8 relative z-10">Asistente de Conciliación</h3>
+                                <div className="flex items-center gap-2 mb-8 relative z-10">
+                                    <h3 className="text-2xl font-black">Asistente de Conciliación</h3>
+                                    <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Datos Simulados"></span>
+                                </div>
                                 <div className="p-8 bg-white/5 border border-white/10 rounded-[2rem] backdrop-blur-xl relative z-10">
                                     <p className="text-blue-300 font-bold leading-relaxed mb-6">He encontrado un abono bancario de <span className="text-white font-black underline underline-offset-4">€3,500.00</span> que coincide exactamente con el presupuesto de <span className="text-white font-black">Carlos Rubio Sanz</span>.</p>
                                     <div className="flex items-center gap-4 bg-white/10 p-5 rounded-2xl border border-white/10 mb-8">
@@ -504,7 +801,10 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
                                 <div className="absolute top-0 right-0 p-6 opacity-5">
                                     <Scale className="w-20 h-20 text-[#051650]" />
                                 </div>
-                                <h3 className="text-2xl font-black text-[#051650] dark:text-white mb-10 tracking-tight">Liquidación Q1 2024</h3>
+                                <div className="flex items-center gap-2 mb-10">
+                                    <h3 className="text-2xl font-black text-[#051650] dark:text-white tracking-tight">Liquidación Q1 2024</h3>
+                                    <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Datos Simulados"></span>
+                                </div>
 
                                 <div className="space-y-8">
                                     <div className="space-y-4">
@@ -557,6 +857,7 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
                         <div className="xl:col-span-2 bg-white dark:bg-slate-800 p-10 rounded-[2.5rem] border-2 border-[#051650] dark:border-slate-700 shadow-xl overflow-hidden">
                             <h3 className="text-2xl font-black text-[#051650] dark:text-white mb-10 tracking-tight flex items-center gap-4">
                                 Calendario Fiscal Rubio García Dental
+                                <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Datos Simulados"></span>
                                 <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[10px] rounded-lg">2024 ACTIVADO</span>
                             </h3>
 
@@ -599,7 +900,10 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
                                     <FileSpreadsheet className="w-7 h-7 text-blue-600" />
                                 </div>
                                 <div>
-                                    <h3 className="text-2xl font-black text-[#051650] dark:text-white tracking-tight">Centro de Informes</h3>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="text-2xl font-black text-[#051650] dark:text-white tracking-tight">Centro de Informes</h3>
+                                        <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Datos Simulados"></span>
+                                    </div>
                                     <p className="text-sm font-medium text-slate-500 mt-1">Exportación analítica Rubio García Dental</p>
                                 </div>
                             </div>

@@ -3,8 +3,8 @@ import { ArrowUpRight, ArrowDownRight, LucideIcon } from 'lucide-react';
 
 interface StatCardProps {
     icon: LucideIcon;
-    title: string;
-    value: string;
+    title: React.ReactNode;
+    value: React.ReactNode;
     trend?: string;
     isPositive?: boolean;
     color: string;
@@ -50,8 +50,8 @@ export const StatCard: React.FC<StatCardProps> = ({
 
 interface PremiumContainerProps {
     children: React.ReactNode;
-    title?: string;
-    subtitle?: string;
+    title?: React.ReactNode;
+    subtitle?: React.ReactNode;
     actions?: React.ReactNode;
     footer?: React.ReactNode;
     className?: string;

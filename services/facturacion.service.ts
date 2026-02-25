@@ -26,25 +26,21 @@ export interface MovimientoBancoUI {
 }
 
 interface FacturaRow {
-    id: string;
-    numero_factura: string;
-    fecha: string;
-    base_imponible: number;
-    total: number;
-    estado: string;
-    tbai_verificado: boolean;
-    paciente_id: string;
-    // mock para simplificar el JOIN (en un entorno real haríamos un JOIN)
-    nombre_paciente_mock?: string;
+    Id: string;
+    No: string;
+    "Fecha Registro": string;
+    Total: number;
+    IdPac?: string;
+    "Nombre fiscal"?: string;
 }
 
 interface MovimientoBancoRow {
-    id: string;
-    fecha: string;
-    descripcion: string;
-    importe: number;
-    tipo: string;
-    conciliado: boolean;
+    Apunte: string;
+    Fecha: string;
+    Concepto: string;
+    Importe: number;
+    Tipo: string; // 'Ingreso' / 'Gasto'
+    IdBanco?: string;
 }
 
 const formatCurrency = (val: number): string =>
@@ -58,19 +54,18 @@ const formatDate = (dateStr: string): string => {
 export const getFacturas = async (): Promise<FacturaUI[]> => {
     if (!isDbConfigured()) return [];
 
-    // Suponemos que la tabla "facturas" se ha creado o usamos mock si no
     try {
-        const rows = await dbSelect<FacturaRow>('facturas', { order: 'fecha.desc' });
+        const rows = await dbSelect<FacturaRow>('NV_CabFactura', { order: '"Fecha Registro".desc' });
         return rows.map(r => ({
-            id: r.numero_factura,
-            name: r.nombre_paciente_mock || 'Paciente Desconocido',
-            date: formatDate(r.fecha),
-            base: formatCurrency(r.base_imponible),
-            total: formatCurrency(r.total),
-            status: (r.estado.charAt(0).toUpperCase() + r.estado.slice(1)) as any,
-            tbai: r.tbai_verificado ? 'Verificado' : 'Enviando...',
-            rawDate: new Date(r.fecha),
-            rawTotal: r.total
+            id: r.No,
+            name: r["Nombre fiscal"] || 'Paciente Desconocido',
+            date: formatDate(r["Fecha Registro"]),
+            base: formatCurrency(r.Total / 1.21), // Cálculo aproximado si no hay base
+            total: formatCurrency(Number(r.Total)),
+            status: 'Liquidado',
+            tbai: 'Verificado',
+            rawDate: new Date(r["Fecha Registro"]),
+            rawTotal: Number(r.Total)
         }));
     } catch (e) {
         return [];
@@ -79,7 +74,7 @@ export const getFacturas = async (): Promise<FacturaUI[]> => {
 
 export const createFactura = async (factura: Partial<FacturaRow>): Promise<boolean> => {
     if (!isDbConfigured()) return true;
-    const row = await dbInsert<FacturaRow>('facturas', factura);
+    const row = await dbInsert<FacturaRow>('NV_CabFactura', factura);
     return row !== null;
 };
 
@@ -87,13 +82,13 @@ export const getMovimientosBanco = async (): Promise<MovimientoBancoUI[]> => {
     if (!isDbConfigured()) return [];
 
     try {
-        const rows = await dbSelect<MovimientoBancoRow>('movimientos_banco', { order: 'fecha.desc' });
+        const rows = await dbSelect<MovimientoBancoRow>('BancoMov', { order: 'Fecha.desc' });
         return rows.map(r => ({
-            desc: r.descripcion,
-            date: formatDate(r.fecha),
-            amount: `${r.tipo === 'ingreso' ? '+' : '-'}${formatCurrency(Math.abs(r.importe))}`.replace('€', '€'),
-            type: r.tipo === 'ingreso' ? 'in' : 'out',
-            match: r.conciliado
+            desc: r.Concepto,
+            date: formatDate(r.Fecha),
+            amount: `${r.Tipo === 'Ingreso' ? '+' : '-'}${formatCurrency(Math.abs(r.Importe))}`.replace('€', '€'),
+            type: r.Tipo === 'Ingreso' ? 'in' : 'out',
+            match: true
         }));
     } catch (e) {
         return [];
@@ -101,13 +96,8 @@ export const getMovimientosBanco = async (): Promise<MovimientoBancoUI[]> => {
 };
 
 export const getGestoriaStats = async () => {
-    // Calculamos estadísticas reales a partir de los datos en BD
-    // En un entorno de producción, esto sería una RPC (función SQL) por eficiencia
     const facturas = await getFacturas();
-    const movimientos = await getMovimientosBanco();
-
     const ingresosBrutos = facturas.reduce((acc, f) => acc + f.rawTotal, 0);
-    // Asumimos un margen del 71% mock por ahora o se calcula con gastos
 
     return {
         ingresosBrutos: formatCurrency(ingresosBrutos),

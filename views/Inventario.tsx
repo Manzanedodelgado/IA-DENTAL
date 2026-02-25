@@ -155,7 +155,7 @@ const Inventario: React.FC<InventarioProps> = ({ activeSubArea }) => {
 
     const renderTrazabilidad = () => (
         <PremiumContainer
-            title="Blockchain Sanitario Ledger"
+            title={<div className="flex items-center gap-2">Blockchain Sanitario Ledger<span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Datos Simulados"></span></div>}
             subtitle="Trazabilidad total de implantes y material quirúrgico AEMPS"
             actions={
                 <button className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-200 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-slate-200 transition-all">
@@ -240,7 +240,7 @@ const Inventario: React.FC<InventarioProps> = ({ activeSubArea }) => {
             {/* Smart Stats Section */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 px-1">
                 <StatCard
-                    title="Ítems en Catálogo"
+                    title={<div className="flex items-center gap-2">Ítems en Catálogo<span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Datos Simulados"></span></div>}
                     value={inventory.length.toString()}
                     trend="Actualizado"
                     icon={Boxes}
@@ -248,7 +248,7 @@ const Inventario: React.FC<InventarioProps> = ({ activeSubArea }) => {
                     description="Referencias activas"
                 />
                 <StatCard
-                    title="Stock Crítico"
+                    title={<div className="flex items-center gap-2">Stock Crítico<span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Datos Simulados"></span></div>}
                     value={inventory.filter(i => i.stockFisico <= i.minimoReorden).length.toString()}
                     trend="Inmediato"
                     isPositive={inventory.filter(i => i.stockFisico <= i.minimoReorden).length === 0}
@@ -257,7 +257,7 @@ const Inventario: React.FC<InventarioProps> = ({ activeSubArea }) => {
                     description="Ítems por debajo del mínimo"
                 />
                 <StatCard
-                    title="Caducidad Próxima"
+                    title={<div className="flex items-center gap-2">Caducidad Próxima<span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Datos Simulados"></span></div>}
                     value={inventory.flatMap(i => i.lotes).filter(l => new Date(l.fechaCaducidad) < new Date(new Date().setMonth(new Date().getMonth() + 3))).length.toString()}
                     trend="30 Días"
                     isPositive={false}
@@ -266,7 +266,7 @@ const Inventario: React.FC<InventarioProps> = ({ activeSubArea }) => {
                     description="Lotes con FEFO prioritario"
                 />
                 <StatCard
-                    title="Rotación"
+                    title={<div className="flex items-center gap-2">Rotación<span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Datos Simulados"></span></div>}
                     value="Alta"
                     trend="Óptima"
                     icon={TrendingDown}
@@ -286,7 +286,10 @@ const Inventario: React.FC<InventarioProps> = ({ activeSubArea }) => {
                             <div className="w-24 h-24 bg-blue-50 text-blue-600 rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-inner border border-blue-100">
                                 <Cpu className="w-12 h-12" />
                             </div>
-                            <h3 className="text-3xl font-black text-[#051650] dark:text-white uppercase tracking-tighter mb-4">Sarah AI Order Engine</h3>
+                            <h3 className="text-3xl font-black text-[#051650] dark:text-white uppercase tracking-tighter mb-4 flex items-center justify-center gap-3">
+                                Sarah AI Order Engine
+                                <span className="w-3 h-3 rounded-full bg-yellow-400 animate-pulse" title="Datos Simulados"></span>
+                            </h3>
                             <p className="text-slate-500 dark:text-slate-400 text-sm max-w-lg mx-auto mb-10 leading-relaxed font-medium">
                                 El motor predictivo analiza el consumo histórico de gabinetes, la agenda quirúrgica de las próximas 4 semanas y los niveles de stock actuales para generar una propuesta de pedido a distribuidores.
                             </p>
