@@ -35,6 +35,12 @@ export interface SOAPNote {
     timestamp: string;
     eva: number;
     alertasDetectadas: string[];
+    // Tratamiento vinculado (nuevo)
+    tratamiento_id?: number;
+    tratamiento_nombre?: string;
+    pieza?: number;          // 11-48
+    cuadrante?: number;      // 1-4
+    arcada?: string;         // 'superior' | 'inferior'
 }
 
 export interface Paciente {

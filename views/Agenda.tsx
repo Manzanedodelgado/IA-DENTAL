@@ -32,16 +32,20 @@ interface AgendaProps {
     activeSubArea?: string;
 }
 
-// Paleta rotatoria — los 2 COLORES DE LA COLUMNA DERECHA de la agenda, alternando
-const PALETTE: { theme: string; text: string; border: string }[] = [
-    { theme: 'bg-indigo-100 border-indigo-300', text: 'text-indigo-900', border: 'border-l-[5px] border-l-indigo-400' },  // azul/lavanda
-    { theme: 'bg-rose-100 border-rose-300', text: 'text-rose-900', border: 'border-l-[5px] border-l-rose-400' },    // salmón claro
+// Paleta pastel suave — referencia: cyan, yellow, pink, green
+const PALETTE: { bg: string; iconBg: string; iconColor: string; text: string; border: string }[] = [
+    { bg: 'background:#e0f7fa', iconBg: 'bg-cyan-400', iconColor: 'text-white', text: 'color:#006064', border: 'border-left:4px solid #00acc1' },      // cyan
+    { bg: 'background:#fffde7', iconBg: 'bg-amber-400', iconColor: 'text-white', text: 'color:#e65100', border: 'border-left:4px solid #ffa726' },      // yellow
+    { bg: 'background:#fce4ec', iconBg: 'bg-rose-400', iconColor: 'text-white', text: 'color:#880e4f', border: 'border-left:4px solid #ec407a' },       // pink
+    { bg: 'background:#e8f5e9', iconBg: 'bg-emerald-400', iconColor: 'text-white', text: 'color:#1b5e20', border: 'border-left:4px solid #66bb6a' },    // green
+    { bg: 'background:#ede7f6', iconBg: 'bg-violet-400', iconColor: 'text-white', text: 'color:#4527a0', border: 'border-left:4px solid #7e57c2' },     // violet
 ];
 
-const MIN_PX_PER_HOUR = 80; // mínimo para que las citas sean legibles
+const MIN_PX_PER_HOUR = 80; // must be divisible by 4 for clean 15-min grid
 
 const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
     const timelineRef = useRef<HTMLDivElement>(null);
+    const timeline2Ref = useRef<HTMLDivElement>(null);
     const slotsG1Ref = useRef<HTMLDivElement>(null);
     const slotsG2Ref = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -128,8 +132,10 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
         const measure = () => {
             const h = container.clientHeight;
             if (h > 0) {
-                const computed = Math.max(MIN_PX_PER_HOUR, Math.floor(h / totalHours));
-                setPxPerHour(computed);
+                const raw = Math.max(MIN_PX_PER_HOUR, Math.floor(h / totalHours));
+                // Round to multiple of 4 so that /4 (15-min) and /2 (30-min) are exact integers
+                const computed = Math.floor(raw / 4) * 4;
+                setPxPerHour(computed || MIN_PX_PER_HOUR);
             }
         };
         measure();
@@ -229,6 +235,7 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
     useEffect(() => {
         if (activeSubArea === 'Gestión de Citas' || showConfiguracion) return;
         const timeline = timelineRef.current;
+        const timeline2 = timeline2Ref.current;
         const slotsG1 = slotsG1Ref.current;
         const slotsG2 = slotsG2Ref.current;
         if (!timeline || !slotsG1 || !slotsG2) return;
@@ -237,54 +244,52 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
         slotsG1.style.height = `${totalHeight}px`;
         slotsG2.style.height = `${totalHeight}px`;
 
-        // --- Build timeline column ---
+        // --- Build timeline columns ---
         timeline.innerHTML = '';
         timeline.style.height = `${totalHeight}px`;
+        if (timeline2) {
+            timeline2.innerHTML = '';
+            timeline2.style.height = `${totalHeight}px`;
+        }
 
         workingSegments.forEach(([start, end], idx) => {
             if (idx > 0) {
-                // Pause divider
                 const pause = document.createElement('div');
-                pause.className = 'flex items-center justify-center bg-slate-100/60 border-y border-dashed border-slate-300';
-                pause.style.height = '0px'; // no visual height — slots don't have break gap either
+                pause.className = 'flex items-center justify-center';
+                pause.style.height = '0px';
                 timeline.appendChild(pause);
             }
             for (let hour = start; hour < end; hour++) {
                 const hDiv = document.createElement('div');
-                hDiv.className = 'relative shrink-0 w-full bg-white';
+                hDiv.className = 'relative shrink-0 w-full';
                 hDiv.style.height = `${pxPerHour}px`;
                 hDiv.innerHTML = `
-                    <!-- :00 tick (long) -->
-                    <div class="absolute top-0 right-0 w-4 border-t-2 border-slate-400"></div>
-                    <!-- :15 tick (short) -->
-                    <div class="absolute top-1/4 right-0 w-2 border-t border-slate-300"></div>
-                    <!-- :30 tick (medium) -->
-                    <div class="absolute top-2/4 right-0 w-3 border-t border-slate-400"></div>
-                    <!-- :45 tick (short) -->
-                    <div class="absolute top-3/4 right-0 w-2 border-t border-slate-300"></div>
-
-                    <!-- Label: HH:00 — bold dark, highlighted -->
-                    <div class="absolute top-0 -translate-y-1/2 w-full text-right pr-3 z-10">
-                        <span class="text-[13px] font-black text-[#051650] leading-none tracking-tight">${String(hour).padStart(2, '0')}:00</span>
+                    <div class="absolute top-0 left-0 right-0 border-t border-slate-200"></div>
+                    <div class="absolute top-0 -translate-y-1/2 w-full text-left pl-3 z-10">
+                        <span class="text-[15px] font-bold text-slate-700 leading-none">${String(hour).padStart(2, '0')}:00</span>
                     </div>
 
-                    <!-- Label: HH:15 — small grey -->
-                    <div class="absolute top-1/4 -translate-y-1/2 w-full text-right pr-3">
-                        <span class="text-[10px] font-normal text-slate-400 leading-none">${String(hour).padStart(2, '0')}:15</span>
+                    <div class="absolute top-1/4 left-0 right-0 border-t border-slate-100"></div>
+                    <div class="absolute top-1/4 -translate-y-1/2 w-full text-left pl-3">
+                        <span class="text-[13px] font-medium text-slate-400 leading-none">${String(hour).padStart(2, '0')}:15</span>
                     </div>
 
-                    <!-- Label: HH:30 — slightly bolder grey -->
-                    <div class="absolute top-2/4 -translate-y-1/2 w-full text-right pr-3">
-                        <span class="text-[11px] font-medium text-slate-500 leading-none">${String(hour).padStart(2, '0')}:30</span>
+                    <div class="absolute top-2/4 left-0 right-0 border-t border-slate-200"></div>
+                    <div class="absolute top-2/4 -translate-y-1/2 w-full text-left pl-3">
+                        <span class="text-[14px] font-semibold text-slate-500 leading-none">${String(hour).padStart(2, '0')}:30</span>
                     </div>
 
-                    <!-- Label: HH:45 — small grey -->
-                    <div class="absolute top-3/4 -translate-y-1/2 w-full text-right pr-3">
-                        <span class="text-[10px] font-normal text-slate-400 leading-none">${String(hour).padStart(2, '0')}:45</span>
+                    <div class="absolute top-3/4 left-0 right-0 border-t border-slate-100"></div>
+                    <div class="absolute top-3/4 -translate-y-1/2 w-full text-left pl-3">
+                        <span class="text-[13px] font-medium text-slate-400 leading-none">${String(hour).padStart(2, '0')}:45</span>
                     </div>
                 `;
-
                 timeline.appendChild(hDiv);
+
+                // Clone for second timeline
+                if (timeline2) {
+                    timeline2.appendChild(hDiv.cloneNode(true));
+                }
             }
         });
 
@@ -322,30 +327,38 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
                 let ring = '';
                 if (cita.estado === 'confirmada') ring = 'ring-2 ring-emerald-400/40';
                 else if (cita.estado === 'espera') ring = 'ring-2 ring-amber-400/40';
-                else if (cita.estado === 'gabinete') ring = 'ring-2 ring-blue-500/40 shadow-blue-200';
+                else if (cita.estado === 'gabinete') ring = 'ring-2 ring-blue-500/40';
                 else if (cita.estado === 'finalizada') ring = 'opacity-50 grayscale';
 
-                div.className = `${cfg.theme} ${cfg.border} border-y border-r ${ring} rounded-r-xl shadow-[0_2px_10px_rgba(0,0,0,0.06)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.12)] hover:-translate-y-[2px] hover:z-[40] transition-all duration-300 cursor-grab active:cursor-grabbing flex flex-col justify-start z-20 mx-0.5 mt-0.5 overflow-hidden group/cita`;
+                div.className = `${ring} rounded-xl shadow-sm hover:shadow-md hover:-translate-y-[1px] hover:z-[40] transition-all duration-200 cursor-grab active:cursor-grabbing flex items-center z-20 mx-1 overflow-hidden group/cita`;
+                div.style.cssText += `${cfg.bg}; ${cfg.border};`;
+
+                // Estado icon mapping
+                const iconSvg = cita.estado === 'gabinete'
+                    ? '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
+                    : cita.estado === 'confirmada'
+                        ? '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>'
+                        : cita.estado === 'espera'
+                            ? '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>'
+                            : '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>';
 
                 div.innerHTML = `
-                    <div class="flex flex-col px-2 py-1.5 relative w-full pointer-events-none h-full overflow-hidden gap-0.5">
-
-                        <!-- Línea 1: Hora + Nombre del paciente -->
-                        <div class="flex items-center gap-1.5 w-full overflow-hidden shrink-0">
-                            <span class="text-[10px] font-black ${cfg.text} shrink-0 tabular-nums leading-none whitespace-nowrap">${cita.horaInicio}</span>
-                            <span class="text-[11px] font-extrabold text-[#051650] leading-tight tracking-tight truncate flex-1 min-w-0">${cita.nombrePaciente || 'Sin datos'}</span>
-                            ${cita.estado === 'gabinete' ? '<span class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)] animate-pulse shrink-0"></span>' : ''}
-                            ${cita.alertasMedicas?.length > 0 ? '<span class="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" title="Alerta médica"></span>' : ''}
+                    <div class="flex items-center w-full px-3 py-2 gap-3 pointer-events-none">
+                        <!-- Icon circular -->
+                        <div class="w-9 h-9 rounded-full ${cfg.iconBg} ${cfg.iconColor} flex items-center justify-center shrink-0 shadow-sm">
+                            ${iconSvg}
                         </div>
-
-                        <!-- Línea 2: Doctor + Estado -->
-                        <div class="flex items-center justify-between gap-1 w-full min-w-0 overflow-hidden shrink-0">
-                            <span class="text-[9px] font-semibold ${cfg.text} opacity-75 truncate flex-1">${cita.doctor ? cita.doctor.split(' ').slice(-1)[0] : 'Dr.'}</span>
-                            <span class="text-[8px] font-black uppercase tracking-wider ${cfg.text} bg-white/50 px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap">${cita.estado === 'planificada' ? 'PLAN.' : cita.estado === 'confirmada' ? 'CONF.' : cita.estado === 'finalizada' ? 'FIN.' : cita.estado === 'espera' ? 'ESPERA' : cita.estado === 'gabinete' ? 'EN SAL.' : cita.estado?.toUpperCase() ?? ''}</span>
+                        <!-- Patient + Treatment -->
+                        <div class="flex flex-col flex-1 min-w-0">
+                            <span class="text-[15px] font-bold text-slate-800 leading-tight truncate">${cita.nombrePaciente || 'Sin datos'}</span>
+                            ${cita.tratamiento ? `<span class="text-[13px] font-medium leading-tight truncate" style="${cfg.text}">${cita.tratamiento}</span>` : ''}
                         </div>
-
-                        <!-- Línea 3: Tratamiento (solo si hay altura suficiente) -->
-                        ${cita.tratamiento && cita.duracionMinutos >= 30 ? `<p class="text-[9px] font-medium ${cfg.text}/70 leading-tight truncate w-full mt-auto">${cita.tratamiento}</p>` : ''}
+                        <!-- Right: Doctor + Gabinete -->
+                        <div class="flex flex-col items-end shrink-0 text-right">
+                            <span class="text-[12px] font-bold text-slate-600 bg-white/60 px-2 py-0.5 rounded-md">${cita.doctor ? cita.doctor.split(' ').slice(-1)[0] : ''}</span>
+                            <span class="text-[11px] font-medium text-slate-400 mt-0.5">${cita.gabinete === 'G1' ? 'Gabinete 1' : 'Gabinete 2'}${cita.duracionMinutos >= 60 ? ' · ' + cita.duracionMinutos + ' min' : ''}</span>
+                        </div>
+                        ${cita.estado === 'gabinete' ? '<span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)] animate-pulse shrink-0 ml-1"></span>' : ''}
                     </div>
                 `;
 
@@ -423,7 +436,7 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
     }
 
     return (
-        <div className="flex flex-1 flex-col gap-4 p-4 relative overflow-hidden bg-gradient-to-br from-[#0c2a80] to-[#051650]">
+        <div className="flex flex-1 flex-col gap-3 p-4 relative overflow-hidden bg-[#f8fafc]">
 
             {/* Floating Context Menu */}
             {contextMenu && (
@@ -474,15 +487,15 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
             )}
 
             {/* Single Unified Toolbar Row */}
-            <header className="flex items-center justify-between rounded-xl p-2 shadow-sm flex-shrink-0" style={{ background: '#ffffff', border: '1px solid #0056b3' }}>
+            <header className="flex items-center justify-between rounded-xl p-2.5 shadow-sm flex-shrink-0 bg-white border border-slate-200">
 
                 {/* Left: Date Nav & Search */}
                 <div className="flex items-center gap-3">
                     {/* DATE NAV */}
-                    <div className="flex items-center gap-1 rounded-lg overflow-hidden shadow-sm" style={{ background: '#ffe4e6', border: '1px solid #fecdd3' }}>
+                    <div className="flex items-center gap-1 rounded-lg overflow-hidden bg-slate-50 border border-slate-200">
                         <button
                             onClick={() => goDay(-1)}
-                            className="w-8 h-8 flex items-center justify-center text-rose-400 hover:text-rose-700 hover:bg-rose-100 transition-all"
+                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"
                         >
                             <ChevronLeft className="w-4 h-4" />
                         </button>
@@ -496,37 +509,40 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
                                         setSelectedDate(d);
                                     }
                                 }}
-                                className="bg-transparent text-[12px] font-black text-rose-900 uppercase tracking-wide focus:outline-none cursor-pointer"
+                                className="bg-transparent text-[13px] font-bold text-slate-800 tracking-wide focus:outline-none cursor-pointer"
                                 title="Haz clic para seleccionar un día concreto del calendario"
                             />
                         </div>
                         <button
                             onClick={() => goDay(1)}
-                            className="w-8 h-8 flex items-center justify-center text-rose-400 hover:text-rose-700 hover:bg-rose-100 transition-all"
+                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"
                         >
                             <ChevronRightIcon className="w-4 h-4" />
                         </button>
                     </div>
+                    {isToday && (
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-600 bg-cyan-50 px-2 py-1 rounded-md border border-cyan-200">HOY</span>
+                    )}
                     {!isToday && (
                         <button
                             onClick={goToday}
-                            className="text-[10px] font-black uppercase tracking-wider text-rose-900 px-3 py-1.5 rounded-lg transition-all" style={{ background: '#ffe4e6', border: '1px solid #fecdd3' }}
+                            className="text-[10px] font-bold uppercase tracking-wider text-slate-600 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 hover:bg-slate-100 transition-all"
                         >
                             Hoy
                         </button>
                     )}
 
-                    <div className="h-5 w-px bg-rose-200 mx-1" />
+                    <div className="h-5 w-px bg-slate-200 mx-1" />
 
                     {/* SEARCH */}
                     <div className="relative">
-                        <Search className="w-4 h-4 text-rose-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                         <input
                             type="text"
                             placeholder="Buscar paciente o cita..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-9 pr-4 py-1.5 text-[11px] font-medium text-rose-900 placeholder-rose-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-200 w-56 placeholder:tracking-wide" style={{ background: '#ffe4e6', border: '1px solid #fecdd3' }}
+                            className="pl-9 pr-4 py-1.5 text-[11px] font-medium text-slate-700 placeholder-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-200 w-56 bg-slate-50 border border-slate-200"
                         />
                     </div>
                 </div>
@@ -537,31 +553,31 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
                     {altaCargaQuirurgica && (
                         <div className="flex items-center gap-2 bg-rose-50 text-rose-600 px-3 py-1.5 rounded-lg border border-rose-100 animate-in fade-in zoom-in duration-300 shadow-sm mr-2">
                             <Activity className="w-3.5 h-3.5 animate-pulse shrink-0" />
-                            <span className="text-[10px] font-black uppercase tracking-wider hidden xl:inline">Carga Quirúrgica &gt;40% — Refuerzo necesario</span>
+                            <span className="text-[10px] font-black uppercase tracking-wider hidden xl:inline">Carga Quirúrgica &gt;40%</span>
                             <button onClick={() => setAltaCargaQuirurgica(false)} className="ml-1 hover:bg-rose-200/50 rounded-full p-0.5"><X className="w-3.5 h-3.5" /></button>
                         </div>
                     )}
 
-                    {/* TABS & FILTERS */}
-                    <div className="flex items-center p-1 rounded-lg mr-2 shadow-sm" style={{ background: '#ffe4e6', border: '1px solid #fecdd3' }}>
-                        <button
-                            onClick={() => setVistaTemporal('semana')}
-                            className={`text-[11px] font-bold uppercase px-3 py-1.5 rounded-md transition-all ${vistaTemporal === 'semana' ? 'bg-white text-rose-700 shadow-sm' : 'text-rose-400 hover:text-rose-700'}`}
-                        >
-                            Semana
-                        </button>
+                    {/* VIEW TABS - Day/Week */}
+                    <div className="flex items-center p-0.5 rounded-lg bg-slate-100 border border-slate-200">
                         <button
                             onClick={() => setVistaTemporal('dia')}
-                            className={`text-[11px] font-bold uppercase px-3 py-1.5 rounded-md transition-all ${vistaTemporal === 'dia' ? 'bg-white text-rose-700 shadow-sm' : 'text-rose-400 hover:text-rose-700'}`}
+                            className={`text-[11px] font-bold px-3 py-1.5 rounded-md transition-all ${vistaTemporal === 'dia' ? 'bg-cyan-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             Día
+                        </button>
+                        <button
+                            onClick={() => setVistaTemporal('semana')}
+                            className={`text-[11px] font-bold px-3 py-1.5 rounded-md transition-all ${vistaTemporal === 'semana' ? 'bg-cyan-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                        >
+                            Semana
                         </button>
                     </div>
 
                     <div className="relative isolate z-[100]">
                         <button
                             onClick={(e) => { e.stopPropagation(); setShowDoctorsMenu(prev => !prev); }}
-                            className="flex items-center gap-1.5 text-[11px] font-bold uppercase px-3 py-1.5 rounded-lg text-rose-900 transition-all shadow-sm" style={{ background: '#ffe4e6', border: '1px solid #fecdd3' }}
+                            className="flex items-center gap-1.5 text-[11px] font-bold uppercase px-3 py-1.5 rounded-lg text-slate-600 transition-all bg-slate-50 border border-slate-200 hover:bg-slate-100"
                         >
                             <User className="w-3.5 h-3.5" /> Doctores <ChevronDown className="w-3.5 h-3.5" />
                         </button>
@@ -672,24 +688,35 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
             </header >
 
             {/* Main grid */}
-            < main className="flex-1 flex flex-col bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-200/60 overflow-hidden ring-1 ring-black/5" >
+            < main className="flex-1 flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden" >
 
                 {/* Column headers */}
-                < div className="flex bg-gradient-to-b from-white to-slate-50/80 border-b border-slate-200 sticky top-0 z-30 h-10 shadow-sm shrink-0" >
-                    <div className="w-[70px] shrink-0 border-r border-slate-200 flex items-center justify-center bg-slate-50/50">
-                        <Clock className="w-4 h-4 text-slate-400" />
+                < div className="flex border-b border-slate-200 sticky top-0 z-30 h-12 shrink-0 bg-slate-50" >
+                    <div className="w-[90px] shrink-0 border-r border-slate-200 flex items-center justify-center">
+                        <span className="text-[13px] font-bold text-slate-400 uppercase tracking-wider">Hora</span>
                     </div>
                     <div className={`flex-1 grid ${vistaGabinete === 'ALL' ? 'grid-cols-2' : 'grid-cols-1'} divide-x divide-slate-200`}>
                         {(vistaGabinete === 'ALL' || vistaGabinete === 'G1') && (
-                            <div className="flex items-center justify-center gap-2.5 group hover:bg-slate-50/50 transition-colors cursor-pointer">
-                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] ring-2 ring-emerald-100" />
-                                <span className="text-[11px] font-black text-[#051650] uppercase tracking-widest transition-colors">Dr. Mario Rubio</span>
+                            <div className="flex items-center justify-center gap-2.5 group hover:bg-white/80 transition-colors cursor-pointer">
+                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                                <span className="text-[14px] font-bold text-slate-700 uppercase tracking-wide">Dr. Mario Rubio</span>
                             </div>
                         )}
-                        {(vistaGabinete === 'ALL' || vistaGabinete === 'G2') && (
-                            <div className="flex items-center justify-center gap-2.5 group hover:bg-slate-50/50 transition-colors cursor-pointer">
-                                <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.4)] ring-2 ring-blue-100" />
-                                <span className="text-[11px] font-black text-[#051650] uppercase tracking-widest transition-colors">Dra. Irene García</span>
+                        {vistaGabinete === 'ALL' && (
+                            <div className="flex items-center gap-1">
+                                <div className="w-[90px] shrink-0 border-x border-slate-200 flex items-center justify-center">
+                                    <span className="text-[13px] font-bold text-slate-400 uppercase tracking-wider">Hora</span>
+                                </div>
+                                <div className="flex-1 flex items-center justify-center gap-2.5">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                                    <span className="text-[14px] font-bold text-slate-700 uppercase tracking-wide">Dra. Irene García</span>
+                                </div>
+                            </div>
+                        )}
+                        {vistaGabinete === 'G2' && (
+                            <div className="flex items-center justify-center gap-2.5 group hover:bg-white/80 transition-colors cursor-pointer">
+                                <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                                <span className="text-[14px] font-bold text-slate-700 uppercase tracking-wide">Dra. Irene García</span>
                             </div>
                         )}
                     </div>
@@ -736,27 +763,51 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
                         {/* Timeline column */}
                         <div
                             ref={timelineRef}
-                            className="w-[70px] shrink-0 border-r border-slate-400 bg-white relative z-20"
-                            style={{ height: totalHeight }}
+                            className="w-[90px] shrink-0 border-r border-slate-200 bg-white relative z-20"
+                            style={{ height: totalHeight, overflow: 'visible' }}
                         />
 
-                        {/* Gabinetes grid */}
+                        {/* Gabinete 1 */}
                         <div
-                            className={`flex-1 grid ${vistaGabinete === 'ALL' ? 'grid-cols-2' : 'grid-cols-1'} divide-x-2 divide-slate-400 relative`}
+                            className={`flex-1 relative ${vistaGabinete === 'G2' ? 'hidden' : 'block'}`}
                             style={{
                                 height: totalHeight,
                                 backgroundColor: '#ffffff',
                                 backgroundImage: [
-                                    `repeating-linear-gradient(to bottom, transparent, transparent ${pxPerHour - 1}px, #cbd5e1 ${pxPerHour - 1}px, #cbd5e1 ${pxPerHour}px)`, // hour lines
-                                    `repeating-linear-gradient(to bottom, transparent, transparent ${pxPerHour / 4 - 1}px, #e2e8f0 ${pxPerHour / 4 - 1}px, #e2e8f0 ${pxPerHour / 4}px)`, // 15-min lines
-                                    `repeating-linear-gradient(to bottom, #ffffff, #ffffff ${pxPerHour}px, #f8fafc ${pxPerHour}px, #f8fafc ${pxPerHour * 2}px)` // Alternating rows
+                                    `repeating-linear-gradient(to bottom, transparent, transparent ${pxPerHour - 1}px, #cbd5e1 ${pxPerHour - 1}px, #cbd5e1 ${pxPerHour}px)`,
+                                    `repeating-linear-gradient(to bottom, transparent, transparent ${pxPerHour / 2 - 1}px, #e2e8f0 ${pxPerHour / 2 - 1}px, #e2e8f0 ${pxPerHour / 2}px)`,
+                                    `repeating-linear-gradient(to bottom, transparent, transparent ${pxPerHour / 4 - 1}px, #f1f5f9 ${pxPerHour / 4 - 1}px, #f1f5f9 ${pxPerHour / 4}px)`,
                                 ].join(','),
-                                backgroundSize: `100% ${pxPerHour}px, 100% ${pxPerHour / 4}px, 100% ${pxPerHour * 2}px`,
-                                backgroundPosition: '0 0, 0 0, 0 0',
+                                backgroundSize: `100% ${pxPerHour}px, 100% ${pxPerHour / 2}px, 100% ${pxPerHour / 4}px`,
                             }}
                         >
-                            <div ref={slotsG1Ref} className={`relative w-full ${vistaGabinete === 'G2' ? 'hidden' : 'block'}`} style={{ height: totalHeight }} />
-                            <div ref={slotsG2Ref} className={`relative w-full ${vistaGabinete === 'G1' ? 'hidden' : 'block'}`} style={{ height: totalHeight }} />
+                            <div ref={slotsG1Ref} className="relative w-full" style={{ height: totalHeight }} />
+                        </div>
+
+                        {/* Second timeline (only when both gabinetes visible) */}
+                        {vistaGabinete === 'ALL' && (
+                            <div
+                                ref={timeline2Ref}
+                                className="w-[90px] shrink-0 border-x border-slate-200 bg-white relative z-20"
+                                style={{ height: totalHeight, overflow: 'visible' }}
+                            />
+                        )}
+
+                        {/* Gabinete 2 */}
+                        <div
+                            className={`flex-1 relative ${vistaGabinete === 'G1' ? 'hidden' : 'block'}`}
+                            style={{
+                                height: totalHeight,
+                                backgroundColor: '#ffffff',
+                                backgroundImage: [
+                                    `repeating-linear-gradient(to bottom, transparent, transparent ${pxPerHour - 1}px, #cbd5e1 ${pxPerHour - 1}px, #cbd5e1 ${pxPerHour}px)`,
+                                    `repeating-linear-gradient(to bottom, transparent, transparent ${pxPerHour / 2 - 1}px, #e2e8f0 ${pxPerHour / 2 - 1}px, #e2e8f0 ${pxPerHour / 2}px)`,
+                                    `repeating-linear-gradient(to bottom, transparent, transparent ${pxPerHour / 4 - 1}px, #f1f5f9 ${pxPerHour / 4 - 1}px, #f1f5f9 ${pxPerHour / 4}px)`,
+                                ].join(','),
+                                backgroundSize: `100% ${pxPerHour}px, 100% ${pxPerHour / 2}px, 100% ${pxPerHour / 4}px`,
+                            }}
+                        >
+                            <div ref={slotsG2Ref} className="relative w-full" style={{ height: totalHeight }} />
                         </div>
                     </div>
                 </div >

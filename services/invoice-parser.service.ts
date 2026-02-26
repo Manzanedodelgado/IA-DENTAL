@@ -4,9 +4,15 @@
 //  Extrae datos estructurados de facturas desde:
 //    • Cuerpo de email (texto plano)
 //    • Adjuntos PDF (pdf.js — lectura de texto en browser)
+//  Mejoras v2:
+//    • Descarga PDFs adjuntos y extrae texto
+//    • Extrae nombre real del proveedor (NIF/CIF + razón social)
+//    • Categoriza conceptos automáticamente
+//    • Soporte para enlaces a portales de facturación
 // ─────────────────────────────────────────────────────────────────
 
 import type { GmailInvoiceEmail } from './gmail.service';
+import { downloadAttachment } from './gmail.service';
 
 export interface FacturaExtraida {
     // Identificación
@@ -14,23 +20,27 @@ export interface FacturaExtraida {
     enlace_gmail: string;
 
     // Datos proveedor
-    proveedor: string;
+    proveedor: string;          // Nombre real extraído de la factura
     proveedor_email: string;
+    proveedor_cif: string | null;
 
     // Datos factura
     numero_factura: string | null;
-    fecha_email: string;       // ISO
+    fecha_email: string;        // ISO
     fecha_factura: string | null;
-    concepto: string;
+    concepto: string;           // Asunto del email
+    categoria: string | null;   // Categoría auto-detectada
 
     // Importes
     base_imponible: number | null;
-    iva_pct: number | null;    // e.g. 21, 10, 4, 0
+    iva_pct: number | null;     // e.g. 21, 10, 4, 0
     total: number | null;
 
     // Meta
     tiene_adjunto: boolean;
     nombre_adjunto: string | null;
+    pdf_preview_url: string | null;     // blob: URL for PDF preview
+    enlace_factura_portal: string | null; // Link inside email to view/download invoice
     estado: 'pendiente' | 'cruzado' | 'descartado';
     raw_snippet: string;
 }
@@ -40,11 +50,8 @@ export interface FacturaExtraida {
 /** Limpia y parsea un string de importe español/europeo a número */
 function parseAmount(s: string): number | null {
     if (!s) return null;
-    // Quitar símbolo monetario y espacios
     const cleaned = s.replace(/[€$£\s]/g, '')
-        // Si hay puntos de miles y coma decimal: 1.234,56 → 1234.56
         .replace(/\.(\d{3}),/g, '$1.')
-        // Si solo hay coma como decimal: 1234,56 → 1234.56
         .replace(',', '.');
     const n = parseFloat(cleaned);
     return isNaN(n) ? null : n;
@@ -74,31 +81,92 @@ const reFacturaNum = [
 ];
 
 const reTotal = [
-    /[Tt]otal[:\s€]*([\d.,]+\s*€?)/,
-    /[Ii]mporte[:\s€]*([\d.,]+\s*€?)/,
-    /[Tt]otal[:\s]+([\d]{1,3}(?:[.,]\d{3})*(?:[.,]\d{2}))\s*€/,
-    /€\s*([\d]{1,3}(?:[.,]\d{3})*(?:[.,]\d{2}))/,
-    /Total amount[:\s]+([\d.,]+)/i,
+    /[Tt]otal\s*(?:a pagar|factura)?[:\s€]*(\d[\d.,]*\s*€?)/,
+    /[Ii]mporte\s*(?:total)?[:\s€]*(\d[\d.,]*\s*€?)/,
+    /TOTAL[:\s]+(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2}))\s*€/,
+    /€\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2}))/,
+    /Total amount[:\s]+(\d[\d.,]+)/i,
+    /Gesamtbetrag[:\s]+(\d[\d.,]+)/i,
 ];
 
 const reBase = [
-    /[Bb]ase\s*(?:imponible)?[:\s€]*([\d.,]+)/,
-    /[Ss]ubtotal[:\s€]*([\d.,]+)/,
-    /[Nn]et amount[:\s€]*([\d.,]+)/i,
+    /[Bb]ase\s*(?:imponible)?[:\s€]*(\d[\d.,]+)/,
+    /[Ss]ubtotal[:\s€]*(\d[\d.,]+)/,
+    /[Nn]et(?:o)?\s*(?:amount)?[:\s€]*(\d[\d.,]+)/i,
+    /[Nn]eto[:\s€]*(\d[\d.,]+)/,
 ];
 
 const reIVA = [
     /IVA\s*(\d{1,2})\s*%/i,
     /VAT\s*(\d{1,2})\s*%/i,
     /MwSt\.?\s*(\d{1,2})\s*%/i,
+    /I\.V\.A\.\s*(\d{1,2})\s*%/i,
 ];
 
 const reDate = [
-    /[Ff]echa[:\s]*([\d]{1,2}\/[\d]{1,2}\/[\d]{4})/,
-    /[Dd]ate[:\s]*([\d]{1,2}[\/\-][\d]{1,2}[\/\-][\d]{4})/,
-    /[Dd]atum[:\s]*([\d]{1,2}[\/\-][\d]{1,2}[\/\-][\d]{4})/,
+    /[Ff]echa\s*(?:de\s*)?(?:factura|emisión)?[:\s]*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/,
+    /[Dd]ate[:\s]*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/,
+    /[Dd]atum[:\s]*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/,
     /(\d{1,2})\/(\d{1,2})\/(\d{4})/,
 ];
+
+// ── CIF / NIF del proveedor ──────────────────────────────────────
+
+const reCIF = [
+    /(?:CIF|NIF|N\.I\.F\.|C\.I\.F\.)[:\s]*([A-Z]\d{7,8}[A-Z0-9]?)/i,
+    /(?:VAT\s*(?:ID|No)?|Tax\s*ID)[:\s]*([A-Z]{2}\d{7,12})/i,
+    /\b([A-HJ-NP-SUVW]\d{7}[A-J0-9])\b/,  // Spanish CIF format
+];
+
+// ── Nombre real del proveedor (NO el From del email) ─────────────
+
+const reProveedorNombre = [
+    // "Razón social:" or "Nombre:" at start of invoice
+    /(?:Raz[oó]n\s*social|Nombre\s*(?:fiscal|empresa)|Company\s*name)[:\s]*(.{3,60}?)[\n\r,]/i,
+    // "Emitida por:" 
+    /(?:Emitida?\s*por|Issued\s*by|Ausgestellt\s*von)[:\s]*(.{3,60}?)[\n\r,]/i,
+    // Line right before or after CIF
+    /([A-Z][A-Za-záéíóúñÁÉÍÓÚÑ\s&.,]{3,50})\s*(?:CIF|NIF|N\.I\.F)/i,
+    /(?:CIF|NIF)[:\s]*[A-Z0-9]+[\s\n\r]*(.{3,50}?)[\n\r]/i,
+];
+
+// ── Categorización automática de conceptos ───────────────────────
+
+interface CategoriaRule {
+    categoria: string;
+    keywords: RegExp;
+}
+
+const CATEGORIAS: CategoriaRule[] = [
+    { categoria: '🦷 Material dental', keywords: /dental|implante|composite|endodon|esteriliz|guant|jering|aguja|bracket|ortodoncia|protesi|corona|pr[oó]tesis/i },
+    { categoria: '💊 Farmacia/Medicamento', keywords: /farmac|medicament|anestes|lidocain|articain|medicin/i },
+    { categoria: '🔬 Laboratorio', keywords: /laborat|prótesis\s*dental|lab\s*dental|colado|encerado|zirconio|porcelana/i },
+    { categoria: '⚡ Electricidad', keywords: /electric|luz|iberdrola|endesa|naturgy|energía|kwh|consumo\s*eléctrico/i },
+    { categoria: '💧 Agua', keywords: /agua|canal de isabel|aguas de/i },
+    { categoria: '🔥 Gas', keywords: /\bgas\b|repsol\s*gas|naturgy.*gas/i },
+    { categoria: '📡 Telecomunicaciones', keywords: /telef[oó]nica|movistar|vodafone|orange|m[oó]vil|internet|fibra|telecomunicacion/i },
+    { categoria: '🏥 Seguros', keywords: /segur|p[oó]liza|asisa|sanitas|axa|mapfre|zurich|mutua|caser|responsabilidad\s*civil/i },
+    { categoria: '🏠 Alquiler/Local', keywords: /alquiler|arrendamiento|renta|local\s*comercial|comunidad\s*de\s*propietarios/i },
+    { categoria: '🧹 Limpieza/Mantenimiento', keywords: /limpie|mantenimiento|desinfec|climatizaci|aire\s*acondicionado|extintores/i },
+    { categoria: '💻 Software/IT', keywords: /software|licencia|informática|hosting|dominio|servidor|cloud|saas|erp|crm/i },
+    { categoria: '📋 Asesoría/Gestoría', keywords: /asesor|gestor|contabilidad|fiscal|abogad|notar|legal|trámit/i },
+    { categoria: '👥 RRHH/Nóminas', keywords: /n[oó]mina|salari|seguridad\s*social|prevenci[oó]n|riesgos\s*laborales|mutua.*accidentes/i },
+    { categoria: '📦 Mensajería/Transporte', keywords: /mensajer|transporte|env[ioí]|correos|seur|mrw|dhl|ups|fedex|logística/i },
+    { categoria: '🖨️ Material oficina', keywords: /oficina|papel|t[oó]ner|impresora|material\s*de\s*oficina/i },
+    { categoria: '📢 Marketing/Publicidad', keywords: /marketing|publicidad|google\s*ads|redes\s*sociales|dise[ñn]o|web|seo|publicaci/i },
+    { categoria: '🏦 Servicio bancario', keywords: /banco|bancario|comisi[oó]n|tarjeta|tpv|datáfono|sabadell|santander|caixa|bbva/i },
+    { categoria: '🎓 Formación', keywords: /formaci[oó]n|curso|congreso|seminario|postgrado|máster|certific/i },
+];
+
+function detectCategoria(text: string, subject: string): string | null {
+    const combined = `${subject} ${text}`.toLowerCase();
+    for (const rule of CATEGORIAS) {
+        if (rule.keywords.test(combined)) return rule.categoria;
+    }
+    return null;
+}
+
+// ── Parse helpers ────────────────────────────────────────────────
 
 function parseDate(text: string): string | null {
     for (const re of reDate) {
@@ -130,9 +198,50 @@ function parseIvaPct(text: string): number | null {
             if ([0, 4, 10, 21].includes(n)) return n;
         }
     }
-    // Dental suele ser exento
     if (/exento|exempt|exento de iva/i.test(text)) return 0;
     return null;
+}
+
+function parseCIF(text: string): string | null {
+    for (const re of reCIF) {
+        const m = text.match(re);
+        if (m?.[1]) return m[1].toUpperCase();
+    }
+    return null;
+}
+
+/** Try to extract the REAL provider name from invoice text (not from email From) */
+function parseProveedorNombre(text: string, emailFrom: string): string {
+    for (const re of reProveedorNombre) {
+        const m = text.match(re);
+        if (m?.[1]) {
+            const name = m[1].trim().replace(/[\n\r]+/g, ' ').replace(/\s{2,}/g, ' ');
+            if (name.length >= 3 && name.length <= 60) return name;
+        }
+    }
+    // Fallback: try to extract a company name from the first few lines of text
+    const lines = text.split(/[\n\r]+/).slice(0, 10);
+    for (const line of lines) {
+        const trimmed = line.trim();
+        // Heuristic: a line that looks like a company name (starts with uppercase, 3-50 chars, 
+        // contains mostly letters, not a date/amount)
+        if (
+            trimmed.length >= 5 && trimmed.length <= 50 &&
+            /^[A-ZÁÉÍÓÚÑ]/.test(trimmed) &&
+            !/^\d/.test(trimmed) &&
+            !/total|factura|fecha|base|iva|subtotal|importe/i.test(trimmed) &&
+            !/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}/.test(trimmed) &&
+            !/^\d[\d.,]+\s*€/.test(trimmed)
+        ) {
+            return trimmed;
+        }
+    }
+    // Last resort: use cleaned-up email From
+    return emailFrom
+        .replace(/<[^>]+>/, '')
+        .replace(/^"|"$/g, '')
+        .replace(/noreply|no-reply|automatico|info@|admin@|facturas@|facturacion@/gi, '')
+        .trim() || emailFrom;
 }
 
 // ── PDF text extraction (pdf.js) ─────────────────────────────────
@@ -140,7 +249,6 @@ function parseIvaPct(text: string): number | null {
 /** Extract plain text from a PDF given as base64url string */
 async function extractPdfText(base64url: string): Promise<string> {
     try {
-        // Load pdfjs-dist from CDN dynamically at runtime — bypass TS module resolution
         // eslint-disable-next-line no-new-func
         const cdnImport = new Function('url', 'return import(url)');
         const pdfjsModule = await cdnImport(
@@ -149,7 +257,6 @@ async function extractPdfText(base64url: string): Promise<string> {
 
         if (!pdfjsModule) return '';
 
-        // Set worker
         if (pdfjsModule.GlobalWorkerOptions) {
             pdfjsModule.GlobalWorkerOptions.workerSrc =
                 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.js';
@@ -173,50 +280,143 @@ async function extractPdfText(base64url: string): Promise<string> {
     }
 }
 
+/** Create a blob URL for PDF preview from base64url data */
+function createPdfBlobUrl(base64url: string): string | null {
+    try {
+        const std = base64url.replace(/-/g, '+').replace(/_/g, '/');
+        const binary = atob(std);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        return URL.createObjectURL(blob);
+    } catch {
+        return null;
+    }
+}
+
+// ── Extract invoice portal links from HTML ──────────────────────
+
+/** Keywords in anchor text or href that indicate an invoice link */
+const INVOICE_LINK_KEYWORDS = /factura|invoice|rechnung|descarga|download|ver.*factura|consulta.*factura|acceder.*factura|tu\s*factura|your\s*invoice|factura.*online|factura.*pdf/i;
+
+/** Domains/patterns to EXCLUDE (tracking, unsubscribe, social, etc.) */
+const EXCLUDE_LINKS = /unsub|track|click\.|pixel|facebook|twitter|instagram|linkedin|youtube|mailto:|tel:|/i;
+
+/**
+ * Extract invoice-related links from the HTML body of an email.
+ * Looks for <a href="..."> tags whose text or URL contain invoice keywords.
+ * Returns the best matching URL, or null.
+ */
+function extractInvoicePortalLinks(html: string): string | null {
+    if (!html) return null;
+
+    // Match all <a> tags with href
+    const linkRegex = /<a\s[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi;
+    const candidates: { url: string; score: number }[] = [];
+    let match: RegExpExecArray | null;
+
+    while ((match = linkRegex.exec(html)) !== null) {
+        const url = match[1];
+        const anchorText = match[2].replace(/<[^>]+>/g, '').trim(); // strip inner HTML tags
+
+        // Skip excluded links
+        if (EXCLUDE_LINKS.test(url)) continue;
+        if (url.startsWith('#') || url.length < 10) continue;
+
+        let score = 0;
+        // Anchor text matches invoice keywords → high score
+        if (INVOICE_LINK_KEYWORDS.test(anchorText)) score += 10;
+        // URL itself matches invoice keywords → moderate score
+        if (INVOICE_LINK_KEYWORDS.test(url)) score += 5;
+        // Contains "pdf" in url → bonus
+        if (/\.pdf/i.test(url)) score += 3;
+
+        if (score > 0) {
+            candidates.push({ url, score });
+        }
+    }
+
+    if (candidates.length === 0) return null;
+    // Return the highest-scoring link
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates[0].url;
+}
 
 // ── Main parser ──────────────────────────────────────────────────
 
 /**
  * Parse a GmailInvoiceEmail into a structured FacturaExtraida.
- * Uses email body text first; tries PDF if provided.
+ * Downloads PDF attachments for parsing + preview.
  */
 export const parseInvoiceEmail = async (
     email: GmailInvoiceEmail,
-    pdfBase64?: string,
 ): Promise<FacturaExtraida> => {
-    // Combine all text sources
+    // 1. Start with email body text
     let text = email.bodyText || email.snippet || '';
-    if (pdfBase64) {
-        const pdfText = await extractPdfText(pdfBase64);
-        if (pdfText.length > text.length) text = pdfText + '\n' + text;
+    let pdfBlobUrl: string | null = null;
+
+    // 2. Download and parse PDF attachment if present
+    const pdfAttachment = email.attachments.find(a =>
+        a.mimeType === 'application/pdf' ||
+        a.filename.toLowerCase().endsWith('.pdf')
+    );
+
+    if (pdfAttachment && !email.id.startsWith('mock-')) {
+        try {
+            const pdfData = await downloadAttachment(email.id, pdfAttachment.id);
+            if (pdfData) {
+                // Create preview URL
+                pdfBlobUrl = createPdfBlobUrl(pdfData);
+                // Extract text from PDF
+                const pdfText = await extractPdfText(pdfData);
+                if (pdfText.length > 20) {
+                    // PDF text is likely more accurate, prepend it
+                    text = pdfText + '\n---EMAIL---\n' + text;
+                }
+            }
+        } catch { /* continue with email body only */ }
     }
 
+    // 3. Extract fields
     const total = findAmount(text, reTotal);
     const base = findAmount(text, reBase);
-
-    // If only total is found and we know IVA, derive base
     const ivaPct = parseIvaPct(text);
+
     let baseImponible = base;
     if (!baseImponible && total !== null && ivaPct !== null && ivaPct > 0) {
         baseImponible = Math.round((total / (1 + ivaPct / 100)) * 100) / 100;
     }
+
+    // 4. Extract real provider name from invoice content (not From header)
+    const proveedor = parseProveedorNombre(text, email.de);
+    const proveedorCif = parseCIF(text);
+
+    // 5. Detect category
+    const categoria = detectCategoria(text, email.asunto);
+
+    // 6. Extract invoice portal link from HTML body
+    const enlaceFacturaPortal = extractInvoicePortalLinks(email.bodyHtml);
 
     const attachment = email.attachments[0] ?? null;
 
     return {
         gmail_message_id: email.id,
         enlace_gmail: email.enlaceGmail,
-        proveedor: email.de,
+        proveedor,
         proveedor_email: email.deEmail,
+        proveedor_cif: proveedorCif,
         numero_factura: parseNumeroFactura(text, email.asunto),
         fecha_email: email.fecha,
         fecha_factura: parseDate(text),
         concepto: email.asunto,
+        categoria,
         base_imponible: baseImponible,
         iva_pct: ivaPct,
         total,
         tiene_adjunto: email.hasAttachment,
         nombre_adjunto: attachment?.filename ?? null,
+        pdf_preview_url: pdfBlobUrl,
+        enlace_factura_portal: enlaceFacturaPortal,
         estado: 'pendiente',
         raw_snippet: email.snippet.slice(0, 300),
     };
@@ -224,11 +424,128 @@ export const parseInvoiceEmail = async (
 
 /**
  * Batch-parse multiple invoice emails.
- * Returns results sorted by fecha_email descending.
+ * Downloads PDFs, extracts text, categorizes, and auto-saves to Supabase.
  */
 export const parseAllInvoiceEmails = async (
     emails: GmailInvoiceEmail[],
 ): Promise<FacturaExtraida[]> => {
-    const results = await Promise.all(emails.map(e => parseInvoiceEmail(e)));
-    return results.sort((a, b) => b.fecha_email.localeCompare(a.fecha_email));
+    // Parse sequentially to avoid overwhelming Gmail API with parallel attachment downloads
+    const results: FacturaExtraida[] = [];
+    for (const e of emails) {
+        const parsed = await parseInvoiceEmail(e);
+        results.push(parsed);
+    }
+    const sorted = results.sort((a, b) => b.fecha_email.localeCompare(a.fecha_email));
+
+    // Persist to Supabase in the background
+    saveFacturasToSupabase(sorted).catch(() => {/* silent */ });
+
+    return sorted;
+};
+
+// ── Supabase persistence ─────────────────────────────────────────
+
+const SB_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const SB_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+
+/**
+ * Upsert extracted invoices into facturas_email table.
+ * Uses gmail_message_id as conflict target (idempotent).
+ */
+export const saveFacturasToSupabase = async (
+    facturas: FacturaExtraida[],
+): Promise<void> => {
+    if (!SB_URL || !SB_ANON || facturas.length === 0) return;
+
+    const real = facturas.filter(f => !f.gmail_message_id.startsWith('mock-'));
+    if (real.length === 0) return;
+
+    const rows = real.map(f => ({
+        gmail_message_id: f.gmail_message_id,
+        enlace_gmail: f.enlace_gmail,
+        proveedor: f.proveedor,
+        proveedor_email: f.proveedor_email,
+        numero_factura: f.numero_factura,
+        concepto: f.concepto,
+        fecha_email: f.fecha_email,
+        fecha_factura: f.fecha_factura,
+        base_imponible: f.base_imponible,
+        iva_pct: f.iva_pct,
+        total: f.total,
+        tiene_adjunto: f.tiene_adjunto,
+        nombre_adjunto: f.nombre_adjunto,
+        raw_snippet: f.raw_snippet,
+    }));
+
+    await fetch(`${SB_URL}/rest/v1/facturas_email`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': SB_ANON,
+            'Authorization': `Bearer ${SB_ANON}`,
+            'Prefer': 'resolution=ignore-duplicates,return=minimal',
+        },
+        body: JSON.stringify(rows),
+    });
+};
+
+/**
+ * Load previously saved invoices from Supabase.
+ */
+export const loadFacturasFromSupabase = async (): Promise<FacturaExtraida[]> => {
+    if (!SB_URL || !SB_ANON) return [];
+    try {
+        const res = await fetch(
+            `${SB_URL}/rest/v1/facturas_email?select=*&order=fecha_email.desc&limit=200`,
+            { headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}` } },
+        );
+        if (!res.ok) return [];
+        const rows = await res.json() as Record<string, unknown>[];
+        return rows.map(r => ({
+            gmail_message_id: String(r.gmail_message_id ?? ''),
+            enlace_gmail: String(r.enlace_gmail ?? ''),
+            proveedor: String(r.proveedor ?? ''),
+            proveedor_email: String(r.proveedor_email ?? ''),
+            proveedor_cif: r.proveedor_cif ? String(r.proveedor_cif) : null,
+            numero_factura: r.numero_factura ? String(r.numero_factura) : null,
+            fecha_email: String(r.fecha_email ?? new Date().toISOString()),
+            fecha_factura: r.fecha_factura ? String(r.fecha_factura) : null,
+            concepto: String(r.concepto ?? ''),
+            categoria: r.categoria ? String(r.categoria) : null,
+            base_imponible: r.base_imponible !== null ? Number(r.base_imponible) : null,
+            iva_pct: r.iva_pct !== null ? Number(r.iva_pct) : null,
+            total: r.total !== null ? Number(r.total) : null,
+            tiene_adjunto: Boolean(r.tiene_adjunto),
+            nombre_adjunto: r.nombre_adjunto ? String(r.nombre_adjunto) : null,
+            pdf_preview_url: null,
+            enlace_factura_portal: r.enlace_factura_portal ? String(r.enlace_factura_portal) : null,
+            estado: (r.estado as FacturaExtraida['estado']) ?? 'pendiente',
+            raw_snippet: String(r.raw_snippet ?? ''),
+        }));
+    } catch {
+        return [];
+    }
+};
+
+/**
+ * Update the estado of a single factura in Supabase.
+ */
+export const updateFacturaEstado = async (
+    gmailMessageId: string,
+    estado: FacturaExtraida['estado'],
+): Promise<void> => {
+    if (!SB_URL || !SB_ANON || gmailMessageId.startsWith('mock-')) return;
+    await fetch(
+        `${SB_URL}/rest/v1/facturas_email?gmail_message_id=eq.${encodeURIComponent(gmailMessageId)}`,
+        {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': SB_ANON,
+                'Authorization': `Bearer ${SB_ANON}`,
+                'Prefer': 'return=minimal',
+            },
+            body: JSON.stringify({ estado }),
+        },
+    );
 };

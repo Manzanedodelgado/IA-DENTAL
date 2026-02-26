@@ -33,12 +33,13 @@ import {
     ExternalLink,
     Sparkles,
     AlertTriangle,
-    X
+    X,
+    Eye
 } from 'lucide-react';
 import { getFacturas, getMovimientosBanco, getGestoriaStats, FacturaUI, MovimientoBancoUI } from '../services/facturacion.service';
 import { isDbConfigured } from '../services/db';
-import { fetchInvoiceEmails, isGmailConfigured } from '../services/gmail.service';
-import { parseAllInvoiceEmails, type FacturaExtraida } from '../services/invoice-parser.service';
+import { fetchInvoiceEmails, isGmailConfigured, isGmailAuthorized, startGmailAuth, disconnectGmail, handleOAuthRedirect } from '../services/gmail.service';
+import { parseAllInvoiceEmails, loadFacturasFromSupabase, updateFacturaEstado, type FacturaExtraida } from '../services/invoice-parser.service';
 
 interface StatCardProps {
     icon: React.ElementType;
@@ -83,12 +84,36 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
     const [gmailLastSync, setGmailLastSync] = useState<Date | null>(null);
     const [gmailError, setGmailError] = useState<string | null>(null);
     const [gmailSearch, setGmailSearch] = useState('');
+    const [gmailConnected, setGmailConnected] = useState(isGmailAuthorized());
+    const [gmailProgress, setGmailProgress] = useState<string | null>(null);
+    // Filters
+    const [filterYear, setFilterYear] = useState<string>('');
+    const [filterProveedor, setFilterProveedor] = useState<string>('');
+    const [filterCategoria, setFilterCategoria] = useState<string>('');
+    const [filterEstado, setFilterEstado] = useState<string>('');
+
+    // Handle OAuth redirect on mount (if returning from Google auth)
+    useEffect(() => {
+        handleOAuthRedirect().then(ok => {
+            if (ok) {
+                setGmailConnected(true);
+                setActiveTab('gmail');
+                // Auto-sync after connection
+                setTimeout(() => syncGmail(), 500);
+            }
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const syncGmail = useCallback(async () => {
         setGmailSyncing(true);
         setGmailError(null);
+        setGmailProgress('Buscando emails de facturas...');
         try {
-            const emails = await fetchInvoiceEmails(90);
+            const emails = await fetchInvoiceEmails(420, (fetched, total) => {
+                setGmailProgress(`Descargando ${fetched}/${total} emails...`);
+            });
+            setGmailProgress(`Parseando ${emails.length} facturas y descargando PDFs...`);
             const parsed = await parseAllInvoiceEmails(emails);
             setGmailFacturas(parsed);
             setGmailLastSync(new Date());
@@ -96,6 +121,7 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
             setGmailError(e instanceof Error ? e.message : 'Error de sincronización');
         } finally {
             setGmailSyncing(false);
+            setGmailProgress(null);
         }
     }, []);
 
@@ -107,15 +133,40 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
     }, [activeTab]);
 
     const filteredGmailFacturas = gmailFacturas.filter(f => {
+        // Year filter
+        if (filterYear && !f.fecha_email.startsWith(filterYear)) return false;
+        // Proveedor filter
+        if (filterProveedor && f.proveedor !== filterProveedor) return false;
+        // Categoría filter
+        if (filterCategoria && f.categoria !== filterCategoria) return false;
+        // Estado filter
+        if (filterEstado && f.estado !== filterEstado) return false;
+        // Text search
         if (!gmailSearch) return true;
         const q = gmailSearch.toLowerCase();
         return f.proveedor.toLowerCase().includes(q)
             || (f.numero_factura ?? '').toLowerCase().includes(q)
-            || f.concepto.toLowerCase().includes(q);
+            || f.concepto.toLowerCase().includes(q)
+            || (f.categoria ?? '').toLowerCase().includes(q)
+            || (f.proveedor_cif ?? '').toLowerCase().includes(q);
     });
 
-    const toggleFacturaEstado = (id: string, estado: FacturaExtraida['estado']) =>
+    // Derived unique values for filter dropdowns
+    const uniqueYears = [...new Set(gmailFacturas.map(f => f.fecha_email.slice(0, 4)))].sort().reverse();
+    const uniqueProveedores = [...new Set(gmailFacturas.map(f => f.proveedor))].sort();
+    const uniqueCategorias = [...new Set(gmailFacturas.map(f => f.categoria).filter(Boolean) as string[])].sort();
+
+    // Load persisted invoices from Supabase on mount
+    useEffect(() => {
+        loadFacturasFromSupabase().then(rows => {
+            if (rows.length > 0) setGmailFacturas(rows);
+        });
+    }, []);
+
+    const toggleFacturaEstado = (id: string, estado: FacturaExtraida['estado']) => {
         setGmailFacturas(prev => prev.map(f => f.gmail_message_id === id ? { ...f, estado } : f));
+        updateFacturaEstado(id, estado).catch(() => {/* silent */ });
+    };
 
     useEffect(() => {
         if (!activeSubArea) return;
@@ -458,38 +509,65 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
                         {/* Header: sync controls */}
                         <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6 bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] border-2 border-[#051650] shadow-xl">
                             <div className="flex items-start gap-5">
-                                <div className="p-4 bg-blue-50 rounded-2xl shrink-0">
-                                    <Mail className="w-7 h-7 text-blue-600" />
+                                <div className={`p-4 rounded-2xl shrink-0 ${gmailConnected ? 'bg-emerald-50' : 'bg-blue-50'}`}>
+                                    <Mail className={`w-7 h-7 ${gmailConnected ? 'text-emerald-600' : 'text-blue-600'}`} />
                                 </div>
                                 <div>
                                     <h2 className="text-2xl font-black text-[#051650] dark:text-white tracking-tight">Facturas desde Gmail</h2>
                                     <p className="text-sm text-slate-500 mt-1 font-medium">
                                         <span className="font-black text-[#051650]">info@rubiogarciandental.com</span>
-                                        {' — '} Últimos 90 días
+                                        {' — '} Desde Ene 2025
                                     </p>
+                                    {gmailConnected && (
+                                        <div className="flex items-center gap-1.5 mt-1">
+                                            <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                            <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Gmail Conectado</span>
+                                        </div>
+                                    )}
                                     {gmailLastSync && (
-                                        <p className="text-[10px] text-slate-400 mt-1">
+                                        <p className="text-[10px] text-slate-400 mt-0.5">
                                             Última sincronización: {gmailLastSync.toLocaleTimeString('es-ES')}
                                         </p>
                                     )}
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-4 w-full xl:w-auto">
+                            <div className="flex items-center gap-3 w-full xl:w-auto">
                                 {!isGmailConfigured() && (
                                     <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 rounded-xl">
                                         <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-                                        <span className="text-[10px] font-black text-amber-700 uppercase tracking-wide">Modo Demo</span>
+                                        <span className="text-[10px] font-black text-amber-700 uppercase tracking-wide">Sin credenciales</span>
                                     </div>
                                 )}
-                                <button
-                                    onClick={syncGmail}
-                                    disabled={gmailSyncing}
-                                    className="flex items-center gap-3 px-8 py-3.5 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:shadow-2xl hover:shadow-blue-500/30 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
-                                >
-                                    <RefreshCw className={`w-4 h-4 ${gmailSyncing ? 'animate-spin' : ''}`} />
-                                    {gmailSyncing ? 'Sincronizando...' : 'Sincronizar Gmail'}
-                                </button>
+
+                                {isGmailConfigured() && !gmailConnected && (
+                                    <button
+                                        onClick={() => startGmailAuth()}
+                                        className="flex items-center gap-3 px-8 py-3.5 bg-gradient-to-r from-emerald-500 to-emerald-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:shadow-2xl hover:shadow-emerald-500/30 transition-all active:scale-95"
+                                    >
+                                        <Mail className="w-4 h-4" />
+                                        Conectar Gmail
+                                    </button>
+                                )}
+
+                                {gmailConnected && (
+                                    <>
+                                        <button
+                                            onClick={syncGmail}
+                                            disabled={gmailSyncing}
+                                            className="flex items-center gap-3 px-8 py-3.5 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:shadow-2xl hover:shadow-blue-500/30 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                                        >
+                                            <RefreshCw className={`w-4 h-4 ${gmailSyncing ? 'animate-spin' : ''}`} />
+                                            {gmailSyncing ? 'Sincronizando...' : 'Sincronizar'}
+                                        </button>
+                                        <button
+                                            onClick={() => { disconnectGmail(); setGmailConnected(false); setGmailFacturas([]); }}
+                                            className="px-4 py-3.5 bg-slate-100 text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-50 hover:text-red-500 transition-all"
+                                        >
+                                            Desconectar
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         </div>
 
@@ -526,16 +604,66 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
                             </div>
                         )}
 
-                        {/* Search bar */}
-                        <div className="relative">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                            <input
-                                type="text"
-                                value={gmailSearch}
-                                onChange={e => setGmailSearch(e.target.value)}
-                                placeholder="Buscar por proveedor, nº factura o concepto..."
-                                className="w-full pl-12 pr-6 py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
-                            />
+                        {/* Search bar + Filters */}
+                        <div className="flex flex-col gap-3">
+                            <div className="relative">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                                <input
+                                    type="text"
+                                    value={gmailSearch}
+                                    onChange={e => setGmailSearch(e.target.value)}
+                                    placeholder="Buscar por proveedor, nº factura o concepto..."
+                                    className="w-full pl-12 pr-6 py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                />
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3">
+                                <Filter className="w-4 h-4 text-slate-400 shrink-0" />
+                                <select
+                                    value={filterYear}
+                                    onChange={e => setFilterYear(e.target.value)}
+                                    className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-200 cursor-pointer"
+                                >
+                                    <option value="">Todos los años</option>
+                                    {uniqueYears.map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                                <select
+                                    value={filterProveedor}
+                                    onChange={e => setFilterProveedor(e.target.value)}
+                                    className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-200 cursor-pointer max-w-[250px] truncate"
+                                >
+                                    <option value="">Todos los proveedores</option>
+                                    {uniqueProveedores.map(p => <option key={p} value={p}>{p}</option>)}
+                                </select>
+                                <select
+                                    value={filterCategoria}
+                                    onChange={e => setFilterCategoria(e.target.value)}
+                                    className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-200 cursor-pointer"
+                                >
+                                    <option value="">Todas las categorías</option>
+                                    {uniqueCategorias.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                                <select
+                                    value={filterEstado}
+                                    onChange={e => setFilterEstado(e.target.value)}
+                                    className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-200 cursor-pointer"
+                                >
+                                    <option value="">Todos los estados</option>
+                                    <option value="pendiente">⏳ Pendiente</option>
+                                    <option value="cruzado">✓ Cruzado</option>
+                                    <option value="descartado">Descartado</option>
+                                </select>
+                                {(filterYear || filterProveedor || filterCategoria || filterEstado) && (
+                                    <button
+                                        onClick={() => { setFilterYear(''); setFilterProveedor(''); setFilterCategoria(''); setFilterEstado(''); }}
+                                        className="px-3 py-2 bg-rose-50 text-rose-600 rounded-xl text-xs font-black uppercase hover:bg-rose-100 transition-all flex items-center gap-1"
+                                    >
+                                        <X className="w-3 h-3" /> Limpiar
+                                    </button>
+                                )}
+                                <span className="ml-auto text-xs font-bold text-slate-400">
+                                    {filteredGmailFacturas.length} de {gmailFacturas.length} facturas
+                                </span>
+                            </div>
                         </div>
 
                         {/* Invoice table */}
@@ -555,34 +683,35 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
                                 </div>
                             )}
 
-                            <div className="overflow-x-auto">
+                            <div className="overflow-y-auto max-h-[60vh]">
                                 <table className="w-full text-left">
                                     <thead className="bg-slate-50 dark:bg-slate-700/30 text-[10px] uppercase font-black tracking-[0.2em] text-slate-400 border-b border-slate-200">
                                         <tr>
-                                            <th className="px-8 py-5">Proveedor</th>
-                                            <th className="px-8 py-5">Nº Factura</th>
-                                            <th className="px-8 py-5">Fecha</th>
-                                            <th className="px-8 py-5 text-right">Base</th>
-                                            <th className="px-8 py-5 text-right">IVA</th>
-                                            <th className="px-8 py-5 text-right">Total</th>
-                                            <th className="px-8 py-5 text-center">Estado</th>
-                                            <th className="px-8 py-5"></th>
+                                            <th className="px-6 py-5">Proveedor</th>
+                                            <th className="px-6 py-5">Nº Factura</th>
+                                            <th className="px-6 py-5">Categoría</th>
+                                            <th className="px-6 py-5">Fecha</th>
+                                            <th className="px-6 py-5 text-right">Base</th>
+                                            <th className="px-6 py-5 text-right">IVA</th>
+                                            <th className="px-6 py-5 text-right">Total</th>
+                                            <th className="px-6 py-5 text-center">Estado</th>
+                                            <th className="px-6 py-5"></th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                                         {gmailSyncing && (
                                             <tr>
-                                                <td colSpan={8} className="px-8 py-16 text-center">
+                                                <td colSpan={9} className="px-6 py-16 text-center">
                                                     <div className="flex flex-col items-center gap-4">
                                                         <RefreshCw className="w-8 h-8 text-blue-400 animate-spin" />
-                                                        <p className="text-sm font-bold text-slate-400">Analizando emails y extrayendo facturas...</p>
+                                                        <p className="text-sm font-bold text-slate-400">{gmailProgress || 'Analizando emails y extrayendo facturas...'}</p>
                                                     </div>
                                                 </td>
                                             </tr>
                                         )}
                                         {!gmailSyncing && filteredGmailFacturas.length === 0 && (
                                             <tr>
-                                                <td colSpan={8} className="px-8 py-16 text-center">
+                                                <td colSpan={9} className="px-6 py-16 text-center">
                                                     <Mail className="w-10 h-10 text-slate-200 mx-auto mb-3" />
                                                     <p className="text-sm font-bold text-slate-400">No se encontraron facturas</p>
                                                     <button onClick={syncGmail} className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest">
@@ -594,7 +723,7 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
                                         {!gmailSyncing && filteredGmailFacturas.map((f) => (
                                             <tr key={f.gmail_message_id} className="hover:bg-blue-50/20 transition-all group">
                                                 {/* Proveedor */}
-                                                <td className="px-8 py-5">
+                                                <td className="px-6 py-5">
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
                                                             <Mail className="w-3.5 h-3.5 text-slate-400" />
@@ -602,12 +731,15 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
                                                         <div>
                                                             <p className="text-sm font-black text-[#051650] dark:text-white leading-none">{f.proveedor}</p>
                                                             <p className="text-[10px] text-slate-400 mt-0.5 font-medium">{f.proveedor_email}</p>
+                                                            {f.proveedor_cif && (
+                                                                <p className="text-[9px] text-slate-300 font-mono font-bold mt-0.5">CIF: {f.proveedor_cif}</p>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </td>
 
                                                 {/* Nº Factura */}
-                                                <td className="px-8 py-5">
+                                                <td className="px-6 py-5">
                                                     {f.numero_factura ? (
                                                         <span className="font-mono text-xs font-black text-blue-700 bg-blue-50 px-2 py-1 rounded-lg">{f.numero_factura}</span>
                                                     ) : (
@@ -615,8 +747,17 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
                                                     )}
                                                 </td>
 
+                                                {/* Categoría */}
+                                                <td className="px-6 py-5">
+                                                    {f.categoria ? (
+                                                        <span className="text-[10px] font-black text-slate-600 bg-slate-50 px-2.5 py-1.5 rounded-lg whitespace-nowrap">{f.categoria}</span>
+                                                    ) : (
+                                                        <span className="text-[10px] text-slate-300 font-bold">Sin clasificar</span>
+                                                    )}
+                                                </td>
+
                                                 {/* Fecha */}
-                                                <td className="px-8 py-5">
+                                                <td className="px-6 py-5">
                                                     <div className="flex flex-col">
                                                         <span className="text-sm font-bold text-slate-700">
                                                             {new Date(f.fecha_email).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
@@ -630,39 +771,39 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
                                                 </td>
 
                                                 {/* Base */}
-                                                <td className="px-8 py-5 text-right">
+                                                <td className="px-6 py-5 text-right">
                                                     <span className="text-sm font-bold text-slate-500">
                                                         {f.base_imponible !== null ? `€${f.base_imponible.toLocaleString('es-ES', { minimumFractionDigits: 2 })}` : '—'}
                                                     </span>
                                                 </td>
 
                                                 {/* IVA */}
-                                                <td className="px-8 py-5 text-right">
+                                                <td className="px-6 py-5 text-right">
                                                     <span className="text-xs font-black text-slate-400">
                                                         {f.iva_pct !== null ? `${f.iva_pct}%` : '—'}
                                                     </span>
                                                 </td>
 
                                                 {/* Total */}
-                                                <td className="px-8 py-5 text-right">
+                                                <td className="px-6 py-5 text-right">
                                                     <span className="text-lg font-black text-[#051650] dark:text-white">
                                                         {f.total !== null ? `€${f.total.toLocaleString('es-ES', { minimumFractionDigits: 2 })}` : '—'}
                                                     </span>
                                                 </td>
 
                                                 {/* Estado */}
-                                                <td className="px-8 py-5 text-center">
+                                                <td className="px-6 py-5 text-center">
                                                     <div className={`mx-auto w-fit px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${f.estado === 'cruzado' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                                                            f.estado === 'descartado' ? 'bg-slate-100 text-slate-400 border-slate-200' :
-                                                                'bg-amber-50 text-amber-600 border-amber-100 animate-pulse'
+                                                        f.estado === 'descartado' ? 'bg-slate-100 text-slate-400 border-slate-200' :
+                                                            'bg-amber-50 text-amber-600 border-amber-100 animate-pulse'
                                                         }`}>
                                                         {f.estado === 'cruzado' ? '✓ Cruzado' : f.estado === 'descartado' ? 'Descartado' : '⏳ Pendiente'}
                                                     </div>
                                                 </td>
 
                                                 {/* Actions */}
-                                                <td className="px-8 py-5">
-                                                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                                <td className="px-6 py-5">
+                                                    <div className="flex items-center gap-2">
                                                         {f.estado !== 'cruzado' && (
                                                             <button
                                                                 onClick={() => toggleFacturaEstado(f.gmail_message_id, 'cruzado')}
@@ -690,6 +831,29 @@ const Gestoria: React.FC<GestoriaProps> = ({ activeSubArea }) => {
                                                                 title="Abrir en Gmail"
                                                             >
                                                                 <ExternalLink className="w-3.5 h-3.5 text-blue-400" />
+                                                            </a>
+                                                        )}
+                                                        {f.enlace_factura_portal && (
+                                                            <a
+                                                                href={f.enlace_factura_portal}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-all flex items-center gap-1"
+                                                                title="Acceder al portal de facturación"
+                                                            >
+                                                                <span className="text-[9px]">🌐</span>
+                                                                <span className="text-[9px] font-black text-indigo-600 uppercase">Acceder</span>
+                                                            </a>
+                                                        )}
+                                                        {f.pdf_preview_url && (
+                                                            <a
+                                                                href={f.pdf_preview_url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="p-1.5 hover:bg-violet-50 rounded-lg transition-all"
+                                                                title="Ver PDF"
+                                                            >
+                                                                <Eye className="w-3.5 h-3.5 text-violet-400" />
                                                             </a>
                                                         )}
                                                     </div>

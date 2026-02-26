@@ -19,6 +19,12 @@ interface SoapRow {
     firmada?: boolean;
     alertas_detectadas?: string[];
     created_at?: string;
+    // Tratamiento vinculado
+    tratamiento_id?: number;
+    tratamiento_nombre?: string;
+    pieza?: number;
+    cuadrante?: number;
+    arcada?: string;
 }
 
 const rowToNote = (row: SoapRow): SOAPNote => ({
@@ -36,6 +42,11 @@ const rowToNote = (row: SoapRow): SOAPNote => ({
     eva: row.eva ?? 0,
     timestamp: row.created_at ?? '',
     alertasDetectadas: row.alertas_detectadas ?? [],
+    tratamiento_id: row.tratamiento_id,
+    tratamiento_nombre: row.tratamiento_nombre,
+    pieza: row.pieza,
+    cuadrante: row.cuadrante,
+    arcada: row.arcada,
 });
 
 const noteToRow = (numPac: string, note: Partial<SOAPNote>): Partial<SoapRow> => ({
@@ -55,6 +66,11 @@ const noteToRow = (numPac: string, note: Partial<SOAPNote>): Partial<SoapRow> =>
     eva: note.eva,
     firmada: note.firmada,
     alertas_detectadas: note.alertasDetectadas,
+    tratamiento_id: note.tratamiento_id,
+    tratamiento_nombre: note.tratamiento_nombre,
+    pieza: note.pieza,
+    cuadrante: note.cuadrante,
+    arcada: note.arcada,
 });
 
 /** Carga todas las notas SOAP de un paciente, ordenadas por fecha desc */

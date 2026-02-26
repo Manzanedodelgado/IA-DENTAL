@@ -141,7 +141,12 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
 
     const handleSelectPatient = (p: Paciente) => { setPaciente(p); showToast(`Cargando ficha de ${p.nombre}`); };
 
-    const handleSaveNote = async (noteData: { subjetivo: string; objetivo: string; analisis: string; plan: string; eva: number; fecha?: string; especialidad?: string }) => {
+    const handleSaveNote = async (noteData: {
+        subjetivo: string; objetivo: string; analisis: string; plan: string;
+        eva: number; fecha?: string; especialidad?: string;
+        tratamiento_id?: number; tratamiento_nombre?: string;
+        pieza?: number; cuadrante?: number; arcada?: string;
+    }) => {
         const fechaDisplay = noteData.fecha
             ? new Date(noteData.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
             : new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -157,9 +162,13 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
             firmada: true,
             eva: noteData.eva || 0,
             timestamp: new Date().toISOString().replace('T', ' ').split('.')[0],
-            alertasDetectadas: []
+            alertasDetectadas: [],
+            tratamiento_id: noteData.tratamiento_id,
+            tratamiento_nombre: noteData.tratamiento_nombre,
+            pieza: noteData.pieza,
+            cuadrante: noteData.cuadrante,
+            arcada: noteData.arcada,
         };
-        // Intentar persistir en BD
         if (paciente.numPac) {
             const savedNote = await createSoapNote(paciente.numPac, newNote);
             const finalNote = savedNote ?? newNote;
@@ -168,14 +177,23 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
         }
     };
 
-    const handleUpdateNote = async (id: string, data: { subjetivo: string; objetivo: string; analisis: string; plan: string; eva: number; fecha?: string; especialidad?: string }) => {
-        // Persistir en BD
+    const handleUpdateNote = async (id: string, data: {
+        subjetivo: string; objetivo: string; analisis: string; plan: string;
+        eva: number; fecha?: string; especialidad?: string;
+        tratamiento_id?: number; tratamiento_nombre?: string;
+        pieza?: number; cuadrante?: number; arcada?: string;
+    }) => {
         await updateSoapNote(id, {
             subjetivo: data.subjetivo, objetivo: data.objetivo,
             analisis: data.analisis, plan: data.plan,
             eva: data.eva,
             ...(data.fecha ? { fecha: data.fecha } : {}),
             ...(data.especialidad ? { especialidad: data.especialidad } : {}),
+            tratamiento_id: data.tratamiento_id,
+            tratamiento_nombre: data.tratamiento_nombre,
+            pieza: data.pieza,
+            cuadrante: data.cuadrante,
+            arcada: data.arcada,
         });
         setPaciente(prev => ({
             ...prev,
@@ -192,6 +210,11 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
                             ? new Date(data.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
                             : n.fecha,
                         especialidad: data.especialidad ?? n.especialidad,
+                        tratamiento_id: data.tratamiento_id,
+                        tratamiento_nombre: data.tratamiento_nombre,
+                        pieza: data.pieza,
+                        cuadrante: data.cuadrante,
+                        arcada: data.arcada,
                     }
                     : n
             ),
@@ -343,7 +366,16 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <p className="text-[13px] text-slate-600 font-medium leading-snug line-clamp-2">{note.plan}</p>
+                                                    {/* Tratamiento + pieza/cuadrante/arcada */}
+                                                    {note.tratamiento_nombre && (
+                                                        <div className="flex items-center gap-1 mb-0.5">
+                                                            <span className="text-[10px] bg-violet-100 text-violet-800 font-bold px-1.5 py-0.5 rounded-full truncate max-w-[200px]">{note.tratamiento_nombre}</span>
+                                                            {note.pieza && <span className="text-[9px] bg-blue-50 text-blue-700 font-bold px-1 py-0.5 rounded">🦷 {note.pieza}</span>}
+                                                            {note.cuadrante && <span className="text-[9px] bg-blue-50 text-blue-700 font-bold px-1 py-0.5 rounded">Q{note.cuadrante}</span>}
+                                                            {note.arcada && <span className="text-[9px] bg-blue-50 text-blue-700 font-bold px-1 py-0.5 rounded capitalize">{note.arcada}</span>}
+                                                        </div>
+                                                    )}
+                                                    <p className="text-[13px] text-slate-600 font-medium leading-snug line-clamp-2">{note.subjetivo || note.plan}</p>
                                                 </div>
                                             </button>
                                             <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
@@ -374,6 +406,11 @@ const Pacientes: React.FC<PacientesProps> = ({ activeSubArea, onSubAreaChange, s
                                                         eva: note.eva,
                                                         fecha: fechaISO,
                                                         especialidad: note.especialidad,
+                                                        tratamiento_id: note.tratamiento_id,
+                                                        tratamiento_nombre: note.tratamiento_nombre,
+                                                        pieza: note.pieza,
+                                                        cuadrante: note.cuadrante,
+                                                        arcada: note.arcada,
                                                     }}
                                                 />
                                             </div>

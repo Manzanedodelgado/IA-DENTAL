@@ -4,32 +4,41 @@
 //  Gmail API — extracción automática de facturas de proveedores
 //  Cuenta: info@rubiogarciandental.com
 //
-//  Autenticación: Service Account JWT (RS256) via Web Crypto API
-//  Variables de entorno (.env):
-//    VITE_GMAIL_SA_EMAIL        = sincronizador-de-agenda@...
-//    VITE_GMAIL_SA_PRIVATE_KEY  = -----BEGIN RSA PRIVATE KEY-----\n...
+//  Autenticación: OAuth2 (Client ID + Client Secret)
+//  Flujo: El usuario pulsa "Conectar Gmail" → popup Google →
+//         obtiene auth code → intercambia por tokens →
+//         stored en localStorage para uso continuo.
+//
+//  Variables (.env.local):
+//    VITE_GMAIL_CLIENT_ID       = 603784757474-...googleusercontent.com
+//    VITE_GMAIL_CLIENT_SECRET   = GOCSPX-...
 //    VITE_GMAIL_USER_EMAIL      = info@rubiogarciandental.com
 // ─────────────────────────────────────────────────────────────────
 
-const SA_EMAIL = import.meta.env.VITE_GMAIL_SA_EMAIL as string | undefined;
-const SA_KEY_PEM = import.meta.env.VITE_GMAIL_SA_PRIVATE_KEY as string | undefined;
+const CLIENT_ID = import.meta.env.VITE_GMAIL_CLIENT_ID as string | undefined;
+const CLIENT_SECRET = import.meta.env.VITE_GMAIL_CLIENT_SECRET as string | undefined;
 const USER_EMAIL = import.meta.env.VITE_GMAIL_USER_EMAIL ?? 'info@rubiogarciandental.com';
 
-export const isGmailConfigured = (): boolean => Boolean(SA_EMAIL && SA_KEY_PEM);
+const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly';
+const REDIRECT_URI = () => `${window.location.origin}/`;
+const LS_KEY = 'gmail_oauth_tokens';
+
+export const isGmailConfigured = (): boolean => Boolean(CLIENT_ID && CLIENT_SECRET);
 
 // ── Types ───────────────────────────────────────────────────────────
 
 export interface GmailInvoiceEmail {
-    id: string;              // Gmail message ID
+    id: string;
     threadId: string;
-    fecha: string;           // ISO 8601
-    de: string;              // From display name
-    deEmail: string;         // From raw email
+    fecha: string;
+    de: string;
+    deEmail: string;
     asunto: string;
-    snippet: string;         // Preview text
+    snippet: string;
     hasAttachment: boolean;
     attachments: GmailAttachment[];
-    bodyText: string;        // Plain text body
+    bodyText: string;
+    bodyHtml: string;   // HTML body — needed to extract portal links
     enlaceGmail: string;
 }
 
@@ -38,86 +47,140 @@ export interface GmailAttachment {
     filename: string;
     mimeType: string;
     size: number;
-    data?: string;           // base64-url decoded content
+    data?: string;
 }
 
-// ── JWT / Token ─────────────────────────────────────────────────────
+// ── OAuth2 Token Management ─────────────────────────────────────────
 
-let _accessToken: string | null = null;
-let _tokenExpiry = 0;
-
-/** Base64-url encode (no padding) */
-const b64url = (buf: ArrayBuffer) =>
-    btoa(String.fromCharCode(...new Uint8Array(buf)))
-        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-
-/** Import PEM RSA private key for RS256 signing */
-async function importPrivateKey(pem: string): Promise<CryptoKey> {
-    // Strip headers and whitespace
-    const stripped = pem
-        .replace(/-----BEGIN (RSA )?PRIVATE KEY-----/g, '')
-        .replace(/-----END (RSA )?PRIVATE KEY-----/g, '')
-        .replace(/\s+/g, '');
-    const binaryDer = Uint8Array.from(atob(stripped), c => c.charCodeAt(0));
-    return crypto.subtle.importKey(
-        'pkcs8',
-        binaryDer.buffer,
-        { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-        false,
-        ['sign'],
-    );
+interface OAuthTokens {
+    access_token: string;
+    refresh_token: string;
+    expires_at: number; // epoch ms
 }
 
-/** Generate a signed JWT for Domain-Wide Delegation */
-async function makeJwt(saEmail: string, userEmail: string, keyPem: string): Promise<string> {
-    const now = Math.floor(Date.now() / 1000);
-    const header = { alg: 'RS256', typ: 'JWT' };
-    const payload = {
-        iss: saEmail,
-        sub: userEmail,
-        scope: 'https://www.googleapis.com/auth/gmail.readonly',
-        aud: 'https://oauth2.googleapis.com/token',
-        iat: now,
-        exp: now + 3600,
-    };
-    const enc = new TextEncoder();
-    const headerB64 = b64url(enc.encode(JSON.stringify(header)).buffer as ArrayBuffer);
-    const payloadB64 = b64url(enc.encode(JSON.stringify(payload)).buffer as ArrayBuffer);
-    const sigInput = `${headerB64}.${payloadB64}`;
-    const key = await importPrivateKey(keyPem);
-    const sig = await crypto.subtle.sign(
-        'RSASSA-PKCS1-v1_5',
-        key,
-        enc.encode(sigInput),
-    );
-    return `${sigInput}.${b64url(sig)}`;
-}
-
-/** Obtain or reuse OAuth2 access_token */
-async function getAccessToken(): Promise<string | null> {
-    if (!SA_EMAIL || !SA_KEY_PEM) return null;
-    if (_accessToken && Date.now() < _tokenExpiry) return _accessToken;
-
+/** Check if user has already authorized Gmail */
+export const isGmailAuthorized = (): boolean => {
+    const stored = localStorage.getItem(LS_KEY);
+    if (!stored) return false;
     try {
-        const jwt = await makeJwt(SA_EMAIL, USER_EMAIL, SA_KEY_PEM);
+        const tokens: OAuthTokens = JSON.parse(stored);
+        return Boolean(tokens.refresh_token);
+    } catch { return false; }
+};
+
+/** Remove stored tokens (disconnect Gmail) */
+export const disconnectGmail = (): void => {
+    localStorage.removeItem(LS_KEY);
+};
+
+/**
+ * Redirect the user to Google's OAuth2 consent page.
+ * After consent, Google redirects back to our origin with ?code=...&state=gmail_auth
+ * handleOAuthRedirect() will catch that on page load.
+ */
+export const startGmailAuth = (): void => {
+    if (!CLIENT_ID) return;
+
+    const params = new URLSearchParams({
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI(),
+        response_type: 'code',
+        scope: SCOPES,
+        access_type: 'offline',
+        prompt: 'consent',
+        login_hint: USER_EMAIL,
+        state: 'gmail_auth',
+    });
+
+    // Direct redirect — most reliable
+    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+};
+
+/**
+ * Check URL on page load — if returning from OAuth redirect (non-popup fallback)
+ */
+export const handleOAuthRedirect = async (): Promise<boolean> => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const state = params.get('state');
+    if (code && state === 'gmail_auth') {
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return exchangeCodeForTokens(code);
+    }
+    return false;
+};
+
+/** Exchange auth code for access_token + refresh_token */
+async function exchangeCodeForTokens(code: string): Promise<boolean> {
+    if (!CLIENT_ID || !CLIENT_SECRET) return false;
+    try {
         const res = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({
-                grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-                assertion: jwt,
+                code,
+                client_id: CLIENT_ID,
+                client_secret: CLIENT_SECRET,
+                redirect_uri: REDIRECT_URI(),
+                grant_type: 'authorization_code',
             }),
         });
         if (!res.ok) {
-            console.error('[Gmail] Token error', await res.text());
+            console.error('[Gmail] Token exchange failed', await res.text());
+            return false;
+        }
+        const data = await res.json();
+        const tokens: OAuthTokens = {
+            access_token: data.access_token,
+            refresh_token: data.refresh_token,
+            expires_at: Date.now() + (data.expires_in - 60) * 1000,
+        };
+        localStorage.setItem(LS_KEY, JSON.stringify(tokens));
+        return true;
+    } catch (e) {
+        console.error('[Gmail] Token exchange error', e);
+        return false;
+    }
+}
+
+/** Get a valid access_token, refreshing if needed */
+async function getAccessToken(): Promise<string | null> {
+    const stored = localStorage.getItem(LS_KEY);
+    if (!stored) return null;
+
+    let tokens: OAuthTokens;
+    try { tokens = JSON.parse(stored); } catch { return null; }
+
+    // Token still valid?
+    if (tokens.access_token && Date.now() < tokens.expires_at) {
+        return tokens.access_token;
+    }
+
+    // Refresh
+    if (!tokens.refresh_token || !CLIENT_ID || !CLIENT_SECRET) return null;
+    try {
+        const res = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                refresh_token: tokens.refresh_token,
+                client_id: CLIENT_ID,
+                client_secret: CLIENT_SECRET,
+                grant_type: 'refresh_token',
+            }),
+        });
+        if (!res.ok) {
+            console.error('[Gmail] Refresh failed', await res.text());
+            disconnectGmail();
             return null;
         }
-        const j = await res.json();
-        _accessToken = j.access_token;
-        _tokenExpiry = Date.now() + (j.expires_in - 60) * 1000;
-        return _accessToken;
-    } catch (e) {
-        console.error('[Gmail] JWT sign error', e);
+        const data = await res.json();
+        tokens.access_token = data.access_token;
+        tokens.expires_at = Date.now() + (data.expires_in - 60) * 1000;
+        localStorage.setItem(LS_KEY, JSON.stringify(tokens));
+        return tokens.access_token;
+    } catch {
         return null;
     }
 }
@@ -144,6 +207,14 @@ function decodeBase64(b64: string): string {
     }
 }
 
+interface GmailPayload {
+    mimeType: string;
+    filename?: string;
+    body?: { data?: string; attachmentId?: string; size?: number };
+    parts?: GmailPayload[];
+    headers?: { name: string; value: string }[];
+}
+
 /** Recursively extract text/plain body from MIME parts */
 function extractBodyText(payload: GmailPayload): string {
     if (payload.mimeType === 'text/plain' && payload.body?.data) {
@@ -158,12 +229,18 @@ function extractBodyText(payload: GmailPayload): string {
     return '';
 }
 
-interface GmailPayload {
-    mimeType: string;
-    filename?: string;
-    body?: { data?: string; attachmentId?: string; size?: number };
-    parts?: GmailPayload[];
-    headers?: { name: string; value: string }[];
+/** Recursively extract text/html body from MIME parts */
+function extractBodyHtml(payload: GmailPayload): string {
+    if (payload.mimeType === 'text/html' && payload.body?.data) {
+        return decodeBase64(payload.body.data);
+    }
+    if (payload.parts) {
+        for (const part of payload.parts) {
+            const t = extractBodyHtml(part);
+            if (t) return t;
+        }
+    }
+    return '';
 }
 
 /** Collect attachments from MIME tree */
@@ -194,11 +271,14 @@ const INVOICE_QUERY = [
 // ── Public API ──────────────────────────────────────────────────────
 
 /**
- * Fetch invoices-related emails from the last N days.
- * Falls back to mock data when not configured.
+ * Fetch invoices-related emails.
+ * Supports full pagination (no 50-message cap).
+ * @param lastDays — how far back to search (default: all of 2025 = ~420 days)
+ * @param onProgress — optional callback for UI progress updates
  */
 export const fetchInvoiceEmails = async (
-    lastDays = 90,
+    lastDays = 420,
+    onProgress?: (fetched: number, total: number) => void,
 ): Promise<GmailInvoiceEmail[]> => {
     const token = await getAccessToken();
     if (!token) return MOCK_EMAILS;
@@ -207,51 +287,82 @@ export const fetchInvoiceEmails = async (
         const after = Math.floor((Date.now() - lastDays * 864e5) / 1000);
         const q = encodeURIComponent(`${INVOICE_QUERY} after:${after}`);
 
-        const list = await gmailGet<{ messages?: { id: string; threadId: string }[] }>(
-            `/messages?q=${q}&maxResults=50`,
-            token,
-        );
-        if (!list.messages?.length) return [];
+        // 1. Collect ALL message IDs with pagination
+        const allMessages: { id: string; threadId: string }[] = [];
+        let pageToken: string | undefined;
 
+        do {
+            const pageParam = pageToken ? `&pageToken=${pageToken}` : '';
+            const list = await gmailGet<{
+                messages?: { id: string; threadId: string }[];
+                nextPageToken?: string;
+                resultSizeEstimate?: number;
+            }>(`/messages?q=${q}&maxResults=100${pageParam}`, token);
+
+            if (list.messages) {
+                allMessages.push(...list.messages);
+                onProgress?.(allMessages.length, list.resultSizeEstimate ?? allMessages.length);
+            }
+            pageToken = list.nextPageToken;
+        } while (pageToken);
+
+        if (allMessages.length === 0) return [];
+
+        console.log(`[Gmail] Found ${allMessages.length} invoice emails since 2025-01-01`);
+
+        // 2. Fetch full message details in batches of 10
         const emails: GmailInvoiceEmail[] = [];
 
-        await Promise.all(
-            list.messages.slice(0, 30).map(async (m) => {
-                try {
-                    const full = await gmailGet<{
-                        id: string; threadId: string; snippet: string;
-                        payload: GmailPayload;
-                    }>(`/messages/${m.id}?format=full`, token);
+        const chunks: { id: string; threadId: string }[][] = [];
+        for (let i = 0; i < allMessages.length; i += 10) {
+            chunks.push(allMessages.slice(i, i + 10));
+        }
 
-                    const headers = full.payload.headers ?? [];
-                    const hdr = (name: string) =>
-                        headers.find(h => h.name.toLowerCase() === name)?.value ?? '';
+        for (const chunk of chunks) {
+            await Promise.all(
+                chunk.map(async (m) => {
+                    try {
+                        const full = await gmailGet<{
+                            id: string; threadId: string; snippet: string;
+                            payload: GmailPayload; internalDate?: string;
+                        }>(`/messages/${m.id}?format=full`, token);
 
-                    const from = hdr('from');
-                    const emailMatch = from.match(/<([^>]+)>/);
-                    const deEmail = emailMatch?.[1] ?? from;
-                    const de = from.replace(/<[^>]+>/, '').trim().replace(/^"|"$/g, '')
-                        || deEmail;
+                        const headers = full.payload.headers ?? [];
+                        const hdr = (name: string) =>
+                            headers.find(h => h.name.toLowerCase() === name.toLowerCase())?.value ?? '';
 
-                    const attachments = extractAttachments(full.payload);
-                    const bodyText = extractBodyText(full.payload);
+                        const from = hdr('From');
+                        const emailMatch = from.match(/<([^>]+)>/);
+                        const deEmail = emailMatch?.[1] ?? from;
+                        const de = from.replace(/<[^>]+>/, '').trim().replace(/^"|"$/g, '') || deEmail;
 
-                    emails.push({
-                        id: full.id,
-                        threadId: full.threadId,
-                        fecha: new Date(Number(hdr('date') || Date.now())).toISOString(),
-                        de,
-                        deEmail,
-                        asunto: hdr('subject'),
-                        snippet: full.snippet,
-                        hasAttachment: attachments.length > 0,
-                        attachments,
-                        bodyText,
-                        enlaceGmail: `https://mail.google.com/mail/u/0/#inbox/${full.id}`,
-                    });
-                } catch {/* skip bad messages */ }
-            }),
-        );
+                        const attachments = extractAttachments(full.payload);
+                        const bodyText = extractBodyText(full.payload);
+                        const bodyHtml = extractBodyHtml(full.payload);
+
+                        const fecha = full.internalDate
+                            ? new Date(Number(full.internalDate)).toISOString()
+                            : new Date().toISOString();
+
+                        emails.push({
+                            id: full.id,
+                            threadId: full.threadId,
+                            fecha,
+                            de,
+                            deEmail,
+                            asunto: hdr('Subject'),
+                            snippet: full.snippet,
+                            hasAttachment: attachments.length > 0,
+                            attachments,
+                            bodyText,
+                            bodyHtml,
+                            enlaceGmail: `https://mail.google.com/mail/u/0/#inbox/${full.id}`,
+                        });
+                    } catch { /* skip bad messages */ }
+                }),
+            );
+            onProgress?.(emails.length, allMessages.length);
+        }
 
         return emails.sort((a, b) => b.fecha.localeCompare(a.fecha));
     } catch (e) {
@@ -274,7 +385,7 @@ export const downloadAttachment = async (
             `/messages/${messageId}/attachments/${attachmentId}`,
             token,
         );
-        return res.data; // base64url encoded
+        return res.data;
     } catch {
         return null;
     }
@@ -291,7 +402,8 @@ const MOCK_EMAILS: GmailInvoiceEmail[] = [
         snippet: 'Estimados clientes, adjuntamos factura correspondiente al pedido realizado...',
         hasAttachment: true,
         attachments: [{ id: 'a1', filename: 'Factura_2025_0234.pdf', mimeType: 'application/pdf', size: 48200 }],
-        bodyText: 'Factura nº 2025/0234\nFecha: 23/02/2025\nBase imponible: 1.240,00 €\nIVA 21%: 260,40 €\nTOTAL: 1.500,40 €',
+        bodyText: 'SUMINISTROS DENTALES IBERIA S.L.\nCIF: B12345678\nFactura nº 2025/0234\nFecha: 23/02/2025\nBase imponible: 1.240,00 €\nIVA 21%: 260,40 €\nTOTAL: 1.500,40 €',
+        bodyHtml: '',
         enlaceGmail: '#mock',
     },
     {
@@ -302,7 +414,8 @@ const MOCK_EMAILS: GmailInvoiceEmail[] = [
         snippet: 'Tu factura del mes de febrero ya está disponible. Importe total: 89,45 €',
         hasAttachment: true,
         attachments: [{ id: 'a2', filename: 'factura_MAT_202502.pdf', mimeType: 'application/pdf', size: 112000 }],
-        bodyText: 'Factura nº MAT-202502\nPeriodo: 01/02/2025 - 28/02/2025\nBase: 73,93 €\nIVA 21%: 15,52 €\nTOTAL: 89,45 €',
+        bodyText: 'TELEFONICA DE ESPAÑA S.A.U.\nCIF: A28015865\nFactura nº MAT-202502\nPeriodo: 01/02/2025 - 28/02/2025\nBase: 73,93 €\nIVA 21%: 15,52 €\nTOTAL: 89,45 €',
+        bodyHtml: '<p>Tu factura ya está disponible.</p><a href="https://www.movistar.es/mimovistar/mis-facturas">Ver tu factura</a>',
         enlaceGmail: '#mock',
     },
     {
@@ -313,7 +426,8 @@ const MOCK_EMAILS: GmailInvoiceEmail[] = [
         snippet: 'Please find attached invoice INV-2025-089. Payment due in 30 days.',
         hasAttachment: true,
         attachments: [{ id: 'a3', filename: 'INV-2025-089.pdf', mimeType: 'application/pdf', size: 67000 }],
-        bodyText: 'Invoice INV-2025-089\nDate: 13/02/2025\nSubtotal: 3.200,00 €\nVAT 21%: 672,00 €\nTotal: 3.872,00 €',
+        bodyText: 'ENDOCARE DENTAL S.L.\nCIF: B87654321\nInvoice INV-2025-089\nDate: 13/02/2025\nSubtotal: 3.200,00 €\nVAT 21%: 672,00 €\nTotal: 3.872,00 €',
+        bodyHtml: '',
         enlaceGmail: '#mock',
     },
     {
@@ -322,9 +436,9 @@ const MOCK_EMAILS: GmailInvoiceEmail[] = [
         de: 'Seguros Sanitas', deEmail: 'facturas@sanitas.es',
         asunto: 'Factura seguro clínica - Febrero 2025',
         snippet: 'Adjuntamos la factura correspondiente a la cuota mensual de su seguro clínica...',
-        hasAttachment: false,
-        attachments: [],
-        bodyText: 'Factura 2025-02-001842\nFecha: 07/02/2025\nBase: 415,00 €\nIVA Exento\nTOTAL: 415,00 €',
+        hasAttachment: false, attachments: [],
+        bodyText: 'SANITAS S.A. DE SEGUROS\nCIF: A28985678\nFactura 2025-02-001842\nFecha: 07/02/2025\nBase: 415,00 €\nIVA Exento\nTOTAL: 415,00 €',
+        bodyHtml: '<p>Su factura está disponible en su área de cliente</p><a href="https://micuenta.sanitas.es/facturas">Acceder a mi factura</a>',
         enlaceGmail: '#mock',
     },
     {
@@ -335,7 +449,8 @@ const MOCK_EMAILS: GmailInvoiceEmail[] = [
         snippet: 'Su factura de electricidad correspondiente al periodo enero 2025 está disponible.',
         hasAttachment: true,
         attachments: [{ id: 'a5', filename: 'factura_iberdrola_01_2025.pdf', mimeType: 'application/pdf', size: 93000 }],
-        bodyText: 'Ref. Factura: 7823991\nPeriodo: 01/01/2025 - 31/01/2025\nBase imponible: 342,18 €\nIVA 21%: 71,86 €\nTOTAL: 414,04 €',
+        bodyText: 'IBERDROLA CLIENTES S.A.U.\nCIF: A95758389\nRef. Factura: 7823991\nPeriodo: 01/01/2025 - 31/01/2025\nBase imponible: 342,18 €\nIVA 21%: 71,86 €\nTOTAL: 414,04 €',
+        bodyHtml: '<p>Consulte su factura online</p><a href="https://www.iberdrola.es/clientes/factura-online">Descargar factura</a>',
         enlaceGmail: '#mock',
     },
 ];
