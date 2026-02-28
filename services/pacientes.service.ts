@@ -51,43 +51,61 @@ const pacienteToRow = (p: Partial<Paciente>): Partial<PacienteRow> => ({
     Observaciones: p.tutor ? `Tutor: ${p.tutor}` : undefined,
 });
 
-// ── Búsqueda de pacientes ────────────────────────────────────────
+// ── Caché de pacientes (FDW no soporta ilike) ───────────────────
+let _pacientesCache: Paciente[] | null = null;
+let _cacheTime = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
-/**
- * Busca pacientes en la tabla "Pacientes" por:
- *   NumPac, Nombre, Apellidos, NIF, TelMovil
- * Soporta nombre+apellidos combinados (parte de cada campo).
- */
-export const searchPacientes = async (query: string): Promise<Paciente[]> => {
+/** Carga todos los pacientes paginando (FDW limita a 1000 por query) */
+const loadAllPacientes = async (): Promise<Paciente[]> => {
+    if (_pacientesCache && Date.now() - _cacheTime < CACHE_TTL) return _pacientesCache;
     if (!isDbConfigured()) return [];
 
-    if (!query.trim()) {
-        // Sin query: devuelve los 30 primeros ordenados por apellidos
+    const PAGE_SIZE = 1000;
+    let all: Paciente[] = [];
+    let offset = 0;
+    let hasMore = true;
+
+    while (hasMore) {
         const rows = await dbSelect<PacienteRow>('Pacientes', {
-            order: 'Apellidos.asc,Nombre.asc',
-            limit: '30',
+            select: 'IdPac,NumPac,Nombre,Apellidos,NIF,TelMovil,Tel1,Tel2',
+            order: 'NumPac.asc',
+            offset: String(offset),
+            limit: String(PAGE_SIZE),
         });
-        return rows.map(rowToPaciente);
+        all.push(...rows.map(rowToPaciente));
+        hasMore = rows.length === PAGE_SIZE;
+        offset += PAGE_SIZE;
     }
 
-    const q = query.trim();
-    // Build a broad OR covering all searchable fields
-    const filter = [
-        `NumPac.ilike.*${q}*`,
-        `Nombre.ilike.*${q}*`,
-        `Apellidos.ilike.*${q}*`,
-        `NIF.ilike.*${q}*`,
-        `TelMovil.ilike.*${q}*`,
-        `Tel1.ilike.*${q}*`,
-        `Tel2.ilike.*${q}*`,
-    ].join(',');
+    console.log(`[PACIENTES] Caché cargada: ${all.length} pacientes`);
+    _pacientesCache = all;
+    _cacheTime = Date.now();
+    return _pacientesCache;
+};
 
-    const rows = await dbSelect<PacienteRow>('Pacientes', {
-        or: filter,
-        order: 'Apellidos.asc,Nombre.asc',
-        limit: '50',
-    });
-    return rows.map(rowToPaciente);
+/**
+ * Busca pacientes por:
+ *   NumPac, Nombre, Apellidos, NIF, TelMovil
+ * Filtra client-side porque MSSQL FDW no soporta ilike.
+ */
+export const searchPacientes = async (query: string): Promise<Paciente[]> => {
+    const all = await loadAllPacientes();
+    if (!query.trim()) return all.slice(0, 30);
+
+    const q = query.trim().toLowerCase();
+    const terms = q.split(/\s+/);
+
+    return all.filter(p => {
+        const haystack = [
+            p.numPac,
+            p.nombre,
+            p.apellidos,
+            p.dni,
+            p.telefono,
+        ].join(' ').toLowerCase();
+        return terms.every(t => haystack.includes(t));
+    }).slice(0, 50);
 };
 
 export const getPaciente = async (numPac: string): Promise<Paciente | null> => {

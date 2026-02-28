@@ -34,7 +34,6 @@ const Header: React.FC<HeaderProps> = ({ activeArea, onNavigate }) => {
                 style={{ width: '260px' }}
                 onClick={() => onNavigate('CLÍNICA', 'General')}
             >
-                {/* Muela a la izquierda del logo */}
                 <svg width="38" height="44" viewBox="0 0 32 36" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
                     <path d="M10 2C6.5 2 2 5 2 10C2 13 3 15 4 17C5.5 20 6 24 7 28C7.5 30.5 8.5 34 10.5 34C12.5 34 13 31 14 28C14.5 26 15 24 16 24C17 24 17.5 26 18 28C19 31 19.5 34 21.5 34C23.5 34 24.5 30.5 25 28C26 24 26.5 20 28 17C29 15 30 13 30 10C30 5 25.5 2 22 2C19.5 2 18 3.5 16 3.5C14 3.5 12.5 2 10 2Z" fill="#0ea5e9" fillOpacity="0.95" />
                     <path d="M10 2C12.5 2 14 3.5 16 3.5C18 3.5 19.5 2 22 2" stroke="rgba(186,230,255,0.6)" strokeWidth="1.2" strokeLinecap="round" />
@@ -58,9 +57,10 @@ const Header: React.FC<HeaderProps> = ({ activeArea, onNavigate }) => {
                                 onNavigate(item.name as Area, firstSubArea);
                             }}
                             className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200 flex-shrink-0 whitespace-nowrap ${isActive
-                                ? 'bg-[#0ea5e9] text-white font-black border border-blue-400/30 shadow-md'
+                                ? 'text-white font-black border border-blue-400/30 shadow-md'
                                 : 'text-white hover:bg-white/10 border border-transparent font-medium'
                                 }`}
+                            style={isActive ? { background: 'linear-gradient(135deg, #1d4ed8, #2563eb)' } : {}}
                         >
                             <Icon className="w-4 h-4 flex-shrink-0" />
                             <span className="text-[12px] font-bold uppercase tracking-wider">

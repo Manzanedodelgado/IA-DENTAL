@@ -1,169 +1,109 @@
 // ─────────────────────────────────────────────────────────────────
 //  services/citas.service.ts
-//  CRUD de citas de agenda contra Supabase.
+//  Lectura de citas de agenda desde Supabase FDW (subquery sobre DCitas).
+//  Los campos llegan ya transformados por la subquery SQL Server:
+//    Fecha='YYYY-MM-DD', Hora='HH:MM', EstadoCita/Tratamiento/Odontologo=texto.
 // ─────────────────────────────────────────────────────────────────
 import { Cita, EstadoCita, TratamientoCategoria } from '../types';
 import { dbSelect, dbInsert, dbUpdate, dbDelete, isDbConfigured } from './db';
 
+/** Row que devuelve el FDW con subquery (ya transformado por SQL Server) */
 interface CitaRow {
-    IdCita: string; // UUID
-    IdPac?: string; // UUID
-    NUMPAC?: string;
-    IdCol?: string;
-    IdUsu?: number;
-    IdBox?: string;
-    Fecha: number;  // YYYYMMDD integer (GELITE format)
-    HorConsul?: string; // HH:MM:SS
-    Hora?: number;      // Seconds from midnight
-    Duracion: number;   // Seconds length
-    Texto?: string;
-    NOTAS?: string;
-    IdSitC?: number;
-    IdIcono?: number;
-    Movil?: string;
-    Confirmada?: boolean;
-    Aceptada?: boolean;
+    Registro?: string;      // IdCita → varchar
+    NumPac?: string;        // NUMPAC
+    Apellidos?: string;     // Extraído de Texto (antes de la coma)
+    Nombre?: string;        // Extraído de Texto (después de la coma)
+    TelMovil?: string;      // Movil
+    Fecha: string;          // 'YYYY-MM-DD'
+    Hora?: string;          // 'HH:MM'
+    EstadoCita?: string;    // 'Planificada' | 'Anulada' | 'Finalizada' | ...
+    Tratamiento?: string;   // 'Control' | 'Urgencia' | 'Endodoncia' | ...
+    Odontologo?: string;    // 'Dr. Mario Rubio' | 'Dra. Irene Garcia' | ...
+    Notas?: string;
+    Duracion?: number;      // minutos (ya convertido desde segundos)
 }
 
-const estadoToIdSitC = (estado: EstadoCita): number => {
+// ── Mapeo estado texto → enum interno ────────────────────────────
+const estadoTextToEnum = (estado?: string): EstadoCita => {
     switch (estado) {
-        case 'planificada': return 0;
-        case 'anulada': return 1;
-        case 'espera': return 2;   // Custom UX state
-        case 'gabinete': return 3; // Custom UX state
-        case 'fallada': return 4;  // Custom UX state
-        case 'finalizada': return 5;
-        case 'confirmada': return 7;
-        case 'cancelada': return 8;
-        default: return 0;
+        case 'Planificada': return 'planificada';
+        case 'Anulada': return 'anulada';
+        case 'Finalizada': return 'finalizada';
+        case 'Confirmada': return 'confirmada';
+        case 'Cancelada': return 'cancelada';
+        default: return 'planificada';
     }
 };
 
-const idSitCToEstado = (id?: number): EstadoCita => {
-    switch (id) {
-        case 0: return 'planificada';
-        case 1: return 'anulada';
-        case 5: return 'finalizada';
-        case 7: return 'confirmada';
-        case 8: return 'cancelada';
-        // Mocked UX states mapped cleanly back to backend unused keys:
-        case 2: return 'espera';
-        case 3: return 'gabinete';
-        case 4: return 'fallada';
-        default: return 'desconocido';
+// ── Mapeo tratamiento texto → categoría UI ───────────────────────
+const tratamientoToCategoria = (tto?: string): TratamientoCategoria => {
+    switch (tto) {
+        case 'Control':
+        case 'Primera Visita':
+        case 'Estudio Ortodoncia':
+        case 'Rx/escaner':
+            return 'Diagnostico';
+        case 'Urgencia': return 'Urgencia';
+        case 'Protesis Fija':
+        case 'Protesis Removible':
+        case 'Ajuste Prot/tto': return 'Protesis';
+        case 'Cirugia/Injerto':
+        case 'Exodoncia': return 'Cirugía';
+        case 'Retirar Ortodoncia':
+        case 'Colocacion Ortodoncia':
+        case 'Mensualidad Ortodoncia': return 'Ortodoncia';
+        case 'Periodoncia': return 'Periodoncia';
+        case 'Cirugia de Implante': return 'Implante';
+        case 'Higiene Dental': return 'Higiene';
+        case 'Endodoncia': return 'Endodoncia';
+        case 'Reconstruccion': return 'Conservadora';
+        default: return 'Diagnostico';
     }
 };
 
-const idIconoToTratamiento = (idIcono?: number): { txt: string; cat: TratamientoCategoria } => {
-    switch (idIcono) {
-        case 1: return { txt: 'Control', cat: 'Diagnostico' };
-        case 2: return { txt: 'Urgencia', cat: 'Urgencia' };
-        case 3: return { txt: 'Protesis Fija', cat: 'Protesis' };
-        case 4: return { txt: 'Cirugia/Injerto', cat: 'Cirugía' };
-        case 6: return { txt: 'Retirar Ortodoncia', cat: 'Ortodoncia' };
-        case 7: return { txt: 'Protesis Removible', cat: 'Protesis' };
-        case 8: return { txt: 'Colocacion Ortodoncia', cat: 'Ortodoncia' };
-        case 9: return { txt: 'Periodoncia', cat: 'Periodoncia' };
-        case 10: return { txt: 'Cirugía de Implante', cat: 'Implante' };
-        case 11: return { txt: 'Mensualidad Ortodoncia', cat: 'Ortodoncia' };
-        case 12: return { txt: 'Ajuste Prot/tto', cat: 'Protesis' };
-        case 13: return { txt: 'Primera Visita', cat: 'Diagnostico' };
-        case 14: return { txt: 'Higiene Dental', cat: 'Higiene' };
-        case 15: return { txt: 'Endodoncia', cat: 'Endodoncia' };
-        case 16: return { txt: 'Reconstruccion', cat: 'Conservadora' };
-        case 17: return { txt: 'Exodoncia', cat: 'Cirugía' };
-        case 18: return { txt: 'Estudio Ortodoncia', cat: 'Diagnostico' };
-        case 19: return { txt: 'Rx/escaner', cat: 'Diagnostico' };
-        default: return { txt: 'Otros', cat: 'Diagnostico' };
-    }
-};
+// ── Conversión row → Cita ────────────────────────────────────────
+const rowToCita = (row: CitaRow): Cita => {
+    const nombreCompleto = [row.Nombre, row.Apellidos].filter(Boolean).join(' ').trim() || 'Paciente';
 
-const idUsuToDoctor = (idUsu?: number, fallbackCol?: string): string => {
-    switch (idUsu) {
-        case 3: return 'Dr. Mario Rubio';
-        case 4: return 'Dra. Irene Garcia';
-        case 8: return 'Dra. Virginia Tresgallo';
-        case 13: return 'Dr. Ignacio Ferrero';
-        case 12: return 'Tc. Juan Antonio Manzanedo';
-        case 10: return 'Dra. Miriam Carrasco';
-        default: return fallbackCol ? fallbackCol : 'Odontologo';
-    }
-};
-
-const rowToCita = (row: CitaRow & { id?: string }): Cita => {
-    // Apellidos y Nombre extraídos del campo Texto según reglas de GELITE
-    const rawText = row.Texto || '';
-    let parsedNombre = rawText.trim();
-    if (rawText.includes(',')) {
-        const parts = rawText.split(',');
-        parsedNombre = `${parts[1].trim()} ${parts[0].trim()}`;
-    }
-
-    const { txt: tratamientoParams, cat: categoriaParams } = idIconoToTratamiento(row.IdIcono);
-    // Si la DB provee IdIcono lo usamos como Tratamiento, sino recaemos en el Texto puro
-    const tratamientoFinal = row.IdIcono ? tratamientoParams : (rawText || 'Tratamiento no especificado');
-
-    // Procesar la hora
-    let horaFinal = '00:00';
-    if (row.HorConsul && typeof row.HorConsul === 'string') {
-        horaFinal = row.HorConsul.slice(0, 5);
-    } else if (row.Hora != null) {
-        const totalMin = Math.floor(row.Hora / 60);
-        const hh = Math.floor(totalMin / 60).toString().padStart(2, '0');
-        const mm = (totalMin % 60).toString().padStart(2, '0');
-        horaFinal = `${hh}:${mm}`;
-    }
-
-    const duracionFinal = row.Duracion ? Math.floor(row.Duracion / 60) : 30;
+    // Doctores (Dr./Dra.) → G1, Sanitarios (Tc., higienistas, etc.) → G2
+    const gabinete = row.Odontologo?.startsWith('Dr') ? 'G1' : 'G2';
 
     return {
-        id: (row.IdCita ?? row.id ?? crypto.randomUUID()).toString(),
-        pacienteNumPac: row.NUMPAC ?? '',
-        nombrePaciente: row.NUMPAC ? parsedNombre : parsedNombre || 'Paciente',
-        gabinete: row.IdBox ?? 'G1',
-        horaInicio: horaFinal,
-        duracionMinutos: duracionFinal,
-        tratamiento: tratamientoFinal,
-        categoria: categoriaParams,
-        estado: idSitCToEstado(row.IdSitC),
-        doctor: idUsuToDoctor(row.IdUsu, row.IdCol?.toString()),
+        id: row.Registro || crypto.randomUUID(),
+        pacienteNumPac: row.NumPac ?? '',
+        nombrePaciente: nombreCompleto,
+        gabinete,
+        horaInicio: row.Hora ?? '00:00',
+        duracionMinutos: row.Duracion ?? 30,
+        tratamiento: row.Tratamiento ?? 'Sin especificar',
+        categoria: tratamientoToCategoria(row.Tratamiento),
+        estado: estadoTextToEnum(row.EstadoCita),
+        doctor: row.Odontologo ?? 'Odontologo',
         alertasMedicas: [],
         alertasLegales: [],
         alertasFinancieras: false,
+        notas: row.Notas ?? '',
     };
 };
 
-const citaToRow = (c: Partial<Cita>, fecha?: Date): Partial<CitaRow> => ({
-    ...(c.pacienteNumPac !== undefined ? { NUMPAC: c.pacienteNumPac || undefined } : {}),
-    ...(c.nombrePaciente !== undefined ? { NUMPAC: c.nombrePaciente } : {}),
-    ...(c.gabinete !== undefined ? { IdBox: c.gabinete } : {}),
-    ...(fecha !== undefined ? { Fecha: dateToInt(fecha) } : {}),
-    ...(c.horaInicio !== undefined ? { HorConsul: c.horaInicio } : {}),
-    ...(c.duracionMinutos !== undefined ? { Duracion: c.duracionMinutos } : {}),
-    ...(c.tratamiento !== undefined ? { Texto: c.tratamiento } : {}),
-    ...(c.estado !== undefined ? { IdSitC: estadoToIdSitC(c.estado) } : {}),
-    ...(c.doctor !== undefined ? { IdCol: c.doctor || undefined } : {}),
-    ...(c.estado === 'confirmada' ? { Confirmada: true } : {}),
-});
-
-/** Formatea un Date como 'YYYY-MM-DD' para UI */
-export const dateToISO = (d: Date): string => d.toISOString().split('T')[0];
-
-/** Convierte un Date al entero YYYYMMDD que usa GELITE en DCitas.Fecha */
-const dateToInt = (d: Date): number => {
+/** Formatea un Date como 'YYYY-MM-DD' para filtrar la FDW */
+export const dateToISO = (d: Date): string => {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
-    return parseInt(`${y}${m}${day}`, 10);
+    return `${y}-${m}-${day}`;
 };
+
 /** Obtiene todas las citas de un día concreto */
 export const getCitasByFecha = async (fecha: Date): Promise<Cita[]> => {
-    if (!isDbConfigured()) return [];
-    const fechaInt = dateToInt(fecha);
+    if (!isDbConfigured()) { console.warn('[CITAS] DB no configurada'); return []; }
+    const fechaStr = dateToISO(fecha);
+    console.log('[CITAS] Buscando fecha:', fechaStr);
     const rows = await dbSelect<CitaRow>('DCitas', {
-        Fecha: `eq.${fechaInt}`,
-        order: 'HorConsul.asc',
+        Fecha: `eq.${fechaStr}`,
+        order: 'Hora.asc',
     });
+    console.log('[CITAS] Rows recibidas:', rows.length, rows);
     return rows.map(rowToCita);
 };
 
@@ -171,42 +111,31 @@ export const getCitasByFecha = async (fecha: Date): Promise<Cita[]> => {
 export const getCitasByPaciente = async (numPac: string): Promise<Cita[]> => {
     if (!isDbConfigured()) return [];
     const rows = await dbSelect<CitaRow>('DCitas', {
-        NUMPAC: `eq.${numPac}`,
-        order: 'Fecha.desc,HorConsul.asc',
+        NumPac: `eq.${numPac}`,
+        order: 'Fecha.desc,Hora.asc',
     });
     return rows.map(rowToCita);
 };
 
-/** Crea una nueva cita */
-export const createCita = async (cita: Omit<Cita, 'id'>, fecha: Date): Promise<Cita | null> => {
-    const row = await dbInsert<CitaRow>('DCitas', citaToRow(cita, fecha));
-    return row ? rowToCita(row) : null;
+/** Crea una nueva cita — FDW subquery es solo lectura */
+export const createCita = async (cita: Omit<Cita, 'id'>, _fecha: Date): Promise<Cita | null> => {
+    return { ...cita, id: crypto.randomUUID() } as Cita;
 };
 
-/** Actualiza una cita (estado, hora, gabinete, etc.) */
+/** Actualiza una cita — FDW subquery es solo lectura */
 export const updateCita = async (
     id: string,
     updates: Partial<Cita>,
-    nuevaFecha?: Date
+    _nuevaFecha?: Date
 ): Promise<Cita | null> => {
-    const row = await dbUpdate<CitaRow>(
-        'DCitas', id,
-        citaToRow(updates, nuevaFecha ? nuevaFecha : undefined),
-        'IdCita'
-    );
-    return row ? rowToCita(row) : null;
+    return { id, ...updates } as Cita;
 };
 
-/** Actualiza solo el estado de una cita */
-export const updateEstadoCita = async (id: string, estado: EstadoCita): Promise<boolean> => {
-    if (!isDbConfigured()) return true;
-    const row = await dbUpdate<CitaRow>('DCitas', id, { IdSitC: estadoToIdSitC(estado) }, 'IdCita');
-    return row !== null;
-};
+/** Actualiza solo el estado de una cita — local only */
+export const updateEstadoCita = async (_id: string, _estado: EstadoCita): Promise<boolean> => true;
 
-/** Elimina una cita */
-export const deleteCita = async (id: string): Promise<boolean> =>
-    dbDelete('DCitas', id, 'IdCita');
+/** Elimina una cita — local only */
+export const deleteCita = async (_id: string): Promise<boolean> => true;
 
 
 // ─── TtosMed — Entradas Médicas reales de GELITE ─────────────────────────────
@@ -220,7 +149,7 @@ interface TtosMedRow {
     IdCol?: number;         // ID colaborador/doctor
     IdUser?: number;
     Notas?: string;         // nota clínica real
-    Importe?: number;
+    Importe?: string | number;  // text from FDW CAST
     PiezasAdu?: number;     // pieza dental adultos
     IdTipoEspec?: number;   // categoría especialidad
     CId?: string;           // 'EntradaMedicaTratamiento' | 'EntradaMedicaEconomica'
@@ -327,7 +256,7 @@ export const getEntradasMedicas = async (
             subjetivo: r.Notas ?? '',
             objetivo: r.PiezasAdu ? `Pieza ${r.PiezasAdu}` : '',
             analisis: '',
-            plan: r.Importe ? `Importe: ${r.Importe.toFixed(2)}€` : '',
+            plan: r.Importe ? `Importe: ${parseFloat(String(r.Importe)).toFixed(2)}€` : '',
             firmada: r.StaTto === 5,
             eva: 0,
             timestamp: r.FecIni ?? '',
@@ -353,7 +282,7 @@ export const getHistorialCitasPaciente = async (
 /** Presupuestos (PRESUTTO) agrupados por Id_Presu — para la vista económica */
 interface PresuRow {
     IdPac?: number; Id_Presu?: number; FecIni?: string;
-    IdTto?: number; StaTto?: number; ImportePre?: number; Notas?: string;
+    IdTto?: number; StaTto?: number; ImportePre?: string | number; Notas?: string;
 }
 
 export const getTratamientosPaciente = async (
@@ -370,7 +299,7 @@ export const getTratamientosPaciente = async (
             const fecha = r.FecIni ? isoToLabel(r.FecIni.slice(0, 10)) : 'Fecha desconocida';
             const entry = byPresu.get(pid) ?? { fecha, tratamientos: [], total: 0, estado: r.StaTto === 7 ? 'Realizado' : 'Planificado' };
             if (r.Notas) entry.tratamientos.push(r.Notas);
-            entry.total += r.ImportePre ?? 0;
+            entry.total += parseFloat(String(r.ImportePre ?? 0)) || 0;
             byPresu.set(pid, entry);
         }
         return Array.from(byPresu.entries()).map(([id, v]) => ({ id, ...v }));

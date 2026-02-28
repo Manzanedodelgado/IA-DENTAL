@@ -27,19 +27,20 @@ import {
     getCitasByFecha, updateCita, updateEstadoCita, createCita, deleteCita,
     isDbConfigured as isDbCfg, dateToISO
 } from '../services/citas.service';
+import { searchPacientes } from '../services/pacientes.service';
+import { Paciente } from '../types';
 
 interface AgendaProps {
     activeSubArea?: string;
 }
 
 // Paleta pastel suave — referencia: cyan, yellow, pink, green
-const PALETTE: { bg: string; iconBg: string; iconColor: string; text: string; border: string }[] = [
-    { bg: 'background:#e0f7fa', iconBg: 'bg-cyan-400', iconColor: 'text-white', text: 'color:#006064', border: 'border-left:4px solid #00acc1' },      // cyan
-    { bg: 'background:#fffde7', iconBg: 'bg-amber-400', iconColor: 'text-white', text: 'color:#e65100', border: 'border-left:4px solid #ffa726' },      // yellow
-    { bg: 'background:#fce4ec', iconBg: 'bg-rose-400', iconColor: 'text-white', text: 'color:#880e4f', border: 'border-left:4px solid #ec407a' },       // pink
-    { bg: 'background:#e8f5e9', iconBg: 'bg-emerald-400', iconColor: 'text-white', text: 'color:#1b5e20', border: 'border-left:4px solid #66bb6a' },    // green
-    { bg: 'background:#ede7f6', iconBg: 'bg-violet-400', iconColor: 'text-white', text: 'color:#4527a0', border: 'border-left:4px solid #7e57c2' },     // violet
-];
+/** Colores por tipo de tratamiento */
+const getTreatmentColor = (tto: string, estado: string): { main: string; light: string; text: string } => {
+    if (estado === 'finalizada') return { main: '#9ca3af', light: '#d1d5db', text: '#4b5563' }; // gray
+    if (tto === 'Primera Visita') return { main: '#FF4B68', light: '#FF7A90', text: '#fff' };
+    return { main: '#1d4ed8', light: '#2563eb', text: '#fff' }; // blue-700
+};
 
 const MIN_PX_PER_HOUR = 80; // must be divisible by 4 for clean 15-min grid
 
@@ -72,6 +73,12 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
     const [showConfiguracion, setShowConfiguracion] = useState(false);
     const [showSettingsMenu, setShowSettingsMenu] = useState(false);
     const [blockForm, setBlockForm] = useState({ gabinete: 'G1', hora: '10:00', duracion: 30, motivo: 'Bioseguridad' });
+
+    // Patient search state for edit modal
+    const [patientQuery, setPatientQuery] = useState('');
+    const [patientResults, setPatientResults] = useState<Paciente[]>([]);
+    const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+    const patientSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const toggleDoctor = (doc: string) => {
         setSelectedDoctors(prev => prev.includes(doc) ? prev.filter(d => d !== doc) : [...prev, doc]);
@@ -159,26 +166,20 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
         return offsetHours * pxPerHour + m * (pxPerHour / 60);
     };
 
-    // ── Initial data + reload por fecha ──────────────────────────────────────
+    // ── Cargar citas reales por fecha ────────────────────────────────────────
     useEffect(() => {
-        const INITIAL_CITAS: Cita[] = [
-            { id: '101', gabinete: 'G1', pacienteNumPac: 'XP-2024-001', nombrePaciente: 'Bárbara Ruiz', horaInicio: '10:15', duracionMinutos: 90, tratamiento: 'Implantes 2.6, 2.7', categoria: 'Implante', estado: 'gabinete', doctor: 'Dr. García', alertasMedicas: ['Látex'], alertasLegales: [], alertasFinancieras: false, presupuestoPendiente: false, pruebasPendientes: true },
-            { id: 'bio_101', gabinete: 'G1', pacienteNumPac: '', nombrePaciente: 'BIOSEGURIDAD', horaInicio: '11:45', duracionMinutos: 15, tratamiento: 'Desinfección Quirúrgica', categoria: 'Cirugía', estado: 'bloqueo_bio', doctor: '', alertasMedicas: [], alertasLegales: [], alertasFinancieras: false },
-            { id: '102', gabinete: 'G2', pacienteNumPac: 'XP-2023-089', nombrePaciente: 'Javier Abad', horaInicio: '10:30', duracionMinutos: 45, tratamiento: 'Revisión Anual', categoria: 'Diagnostico', estado: 'espera', doctor: 'Dra. Rubio', alertasMedicas: [], alertasLegales: ['Consentimiento'], alertasFinancieras: false },
-            { id: '103', gabinete: 'G2', pacienteNumPac: 'XP-2021-452', nombrePaciente: 'Maria Carmen', horaInicio: '11:30', duracionMinutos: 30, tratamiento: 'Curetaje Cuad. 2', categoria: 'Periodoncia', estado: 'confirmada', doctor: 'Hig. Sonia', alertasMedicas: [], alertasLegales: [], alertasFinancieras: true, presupuestoPendiente: true },
-            { id: '104', gabinete: 'G1', pacienteNumPac: 'XP-2022-112', nombrePaciente: 'Pedro Martinez', horaInicio: '12:30', duracionMinutos: 60, tratamiento: 'Endodoncia Multirradicular', categoria: 'Endodoncia', estado: 'planificada', doctor: 'Dr. García', alertasMedicas: ['Cardiopatía'], alertasLegales: [], alertasFinancieras: false, trabajoLaboratorio: true },
-        ];
-
         if (isDbCfg()) {
+            setLoadingCitas(true);
             getCitasByFecha(selectedDate).then(dbCitas => {
-                setCitas(dbCitas.length > 0 ? dbCitas : INITIAL_CITAS);
+                setCitas(dbCitas);
                 const minCir = dbCitas.filter(c => c.categoria === 'Cirugía' && c.estado !== 'bloqueo_bio').reduce((a, c) => a + c.duracionMinutos, 0);
                 setAltaCargaQuirurgica((minCir / 300) > 0.4);
+            }).catch(err => {
+                console.error('Error cargando citas:', err);
+                setCitasError('Error al cargar citas desde la base de datos');
             }).finally(() => setLoadingCitas(false));
         } else {
-            setCitas(INITIAL_CITAS);
-            const minCir = INITIAL_CITAS.filter(c => c.categoria === 'Cirugía' && c.estado !== 'bloqueo_bio').reduce((a, c) => a + c.duracionMinutos, 0);
-            setAltaCargaQuirurgica((minCir / 300) > 0.4);
+            setCitas([]);
             setLoadingCitas(false);
         }
     }, [selectedDate]);
@@ -263,25 +264,26 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
                 const hDiv = document.createElement('div');
                 hDiv.className = 'relative shrink-0 w-full';
                 hDiv.style.height = `${pxPerHour}px`;
+                const showHourLabel = (hour !== 10);
                 hDiv.innerHTML = `
                     <div class="absolute top-0 left-0 right-0 border-t border-slate-200"></div>
-                    <div class="absolute top-0 -translate-y-1/2 w-full text-left pl-3 z-10">
-                        <span class="text-[15px] font-bold text-slate-700 leading-none">${String(hour).padStart(2, '0')}:00</span>
-                    </div>
+                    ${showHourLabel ? `<div class="absolute top-0 -translate-y-1/2 w-full text-right pr-3 z-10">
+                        <span class="text-[12px] font-bold text-slate-700 leading-none">${String(hour).padStart(2, '0')}:00</span>
+                    </div>` : ''}
 
                     <div class="absolute top-1/4 left-0 right-0 border-t border-slate-100"></div>
-                    <div class="absolute top-1/4 -translate-y-1/2 w-full text-left pl-3">
-                        <span class="text-[13px] font-medium text-slate-400 leading-none">${String(hour).padStart(2, '0')}:15</span>
+                    <div class="absolute top-1/4 -translate-y-1/2 w-full text-right pr-3">
+                        <span class="text-[10px] font-medium text-slate-400 leading-none">${String(hour).padStart(2, '0')}:15</span>
                     </div>
 
                     <div class="absolute top-2/4 left-0 right-0 border-t border-slate-200"></div>
-                    <div class="absolute top-2/4 -translate-y-1/2 w-full text-left pl-3">
-                        <span class="text-[14px] font-semibold text-slate-500 leading-none">${String(hour).padStart(2, '0')}:30</span>
+                    <div class="absolute top-2/4 -translate-y-1/2 w-full text-right pr-3">
+                        <span class="text-[11px] font-semibold text-slate-500 leading-none">${String(hour).padStart(2, '0')}:30</span>
                     </div>
 
                     <div class="absolute top-3/4 left-0 right-0 border-t border-slate-100"></div>
-                    <div class="absolute top-3/4 -translate-y-1/2 w-full text-left pl-3">
-                        <span class="text-[13px] font-medium text-slate-400 leading-none">${String(hour).padStart(2, '0')}:45</span>
+                    <div class="absolute top-3/4 -translate-y-1/2 w-full text-right pr-3">
+                        <span class="text-[10px] font-medium text-slate-400 leading-none">${String(hour).padStart(2, '0')}:45</span>
                     </div>
                 `;
                 timeline.appendChild(hDiv);
@@ -309,56 +311,100 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
         let idxG1 = 0;
         let idxG2 = 0;
 
+        // ── Detectar solapamientos por gabinete ──────────────────────
+        const getTimeRange = (c: typeof citas[0]) => {
+            const [hh, mm] = c.horaInicio.split(':').map(Number);
+            const startMin = hh * 60 + mm;
+            return { start: startMin, end: startMin + c.duracionMinutos };
+        };
+        const overlaps = (a: { start: number; end: number }, b: { start: number; end: number }) =>
+            a.start < b.end && b.start < a.end;
+
+        // Para cada gabinete, asignar columnas a citas solapadas
+        const colAssignment = new Map<string, { col: number; totalCols: number }>();
+        ['G1', 'G2'].forEach(gab => {
+            const gabCitas = filteredCitas.filter(c => c.gabinete === gab && c.estado !== 'bloqueo_bio');
+            const ranges = gabCitas.map(c => ({ id: c.id, ...getTimeRange(c) }));
+            const cols: { id: string; start: number; end: number }[][] = [];
+
+            ranges.forEach(r => {
+                // Buscar primera columna libre donde no solape
+                let placed = false;
+                for (let ci = 0; ci < cols.length; ci++) {
+                    if (!cols[ci].some(existing => overlaps(existing, r))) {
+                        cols[ci].push(r);
+                        colAssignment.set(r.id, { col: ci, totalCols: 0 });
+                        placed = true;
+                        break;
+                    }
+                }
+                if (!placed) {
+                    cols.push([r]);
+                    colAssignment.set(r.id, { col: cols.length - 1, totalCols: 0 });
+                }
+            });
+
+            const totalCols = cols.length;
+            // Solo dividir las citas que REALMENTE solapan con otras
+            ranges.forEach(r => {
+                const assignment = colAssignment.get(r.id)!;
+                let maxCols = 0;
+                for (let ci = 0; ci < cols.length; ci++) {
+                    if (cols[ci].some(existing => overlaps(existing, r))) maxCols++;
+                }
+                assignment.totalCols = maxCols;
+            });
+        });
+
         filteredCitas.forEach(cita => {
             const container = cita.gabinete === 'G1' ? slotsG1 : slotsG2;
             const top = minutesToPx(cita.horaInicio);
             const height = cita.duracionMinutos * (pxPerHour / 60);
 
             const div = document.createElement('div');
-            // KEY: absolute + inset-x-0 + explicit top + height = exact slot fit
-            div.style.cssText = `position:absolute; top:${top}px; left:0; right:0; height:${height}px;`;
+            const overlap = colAssignment.get(cita.id);
+            if (overlap && overlap.totalCols > 1) {
+                const widthPct = 100 / overlap.totalCols;
+                const leftPct = overlap.col * widthPct;
+                div.style.cssText = `position:absolute; top:${top}px; left:${leftPct}%; width:${widthPct}%; height:${height}px; min-height:0; overflow:hidden; box-sizing:border-box; padding:0 2px;`;
+            } else {
+                div.style.cssText = `position:absolute; top:${top}px; left:0; right:0; height:${height}px;`;
+            }
 
             if (cita.estado === 'bloqueo_bio') {
                 div.className = 'flex items-center justify-center bg-slate-100/70 border border-dashed border-slate-300 z-0';
                 div.innerHTML = `<span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">bioseguridad</span>`;
             } else {
                 const colIdx = cita.gabinete === 'G1' ? idxG1++ : idxG2++;
-                const cfg = PALETTE[colIdx % PALETTE.length];
+                const tc = getTreatmentColor(cita.tratamiento, cita.estado);
+                // Fondo basado en tratamiento
+                const baseColor = tc.main;
+                const darkColor = tc.light; // degradado sutil
+                const textColor = (['#FBFFA3', '#A9E6E6', '#d1d5db'].includes(tc.main)) ? '#0a3d91' : '#ffffff';
+                // Cejilla y marco siempre rojo
+                const cejillaColor = '#FF4B68';
                 let ring = '';
                 if (cita.estado === 'confirmada') ring = 'ring-2 ring-emerald-400/40';
                 else if (cita.estado === 'espera') ring = 'ring-2 ring-amber-400/40';
                 else if (cita.estado === 'gabinete') ring = 'ring-2 ring-blue-500/40';
-                else if (cita.estado === 'finalizada') ring = 'opacity-50 grayscale';
+                else if (cita.estado === 'finalizada') ring = 'opacity-60';
 
-                div.className = `${ring} rounded-xl shadow-sm hover:shadow-md hover:-translate-y-[1px] hover:z-[40] transition-all duration-200 cursor-grab active:cursor-grabbing flex items-center z-20 mx-1 overflow-hidden group/cita`;
-                div.style.cssText += `${cfg.bg}; ${cfg.border};`;
-
-                // Estado icon mapping
-                const iconSvg = cita.estado === 'gabinete'
-                    ? '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
-                    : cita.estado === 'confirmada'
-                        ? '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>'
-                        : cita.estado === 'espera'
-                            ? '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>'
-                            : '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>';
+                const isOverlapping = overlap && overlap.totalCols > 1;
+                div.className = `${ring} rounded-xl shadow-sm hover:shadow-md hover:-translate-y-[1px] hover:z-[40] transition-all duration-200 cursor-grab active:cursor-grabbing flex items-center z-20 ${isOverlapping ? '' : 'mx-1'} overflow-hidden group/cita`;
+                div.style.cssText += `background:linear-gradient(135deg, ${baseColor}, ${darkColor}); border-left:${isOverlapping ? '4' : '8'}px solid ${cejillaColor}; border-top:1px solid ${cejillaColor}; border-right:1px solid ${cejillaColor}; border-bottom:1px solid ${cejillaColor};`;
 
                 div.innerHTML = `
-                    <div class="flex items-center w-full px-3 py-2 gap-3 pointer-events-none">
-                        <!-- Icon circular -->
-                        <div class="w-9 h-9 rounded-full ${cfg.iconBg} ${cfg.iconColor} flex items-center justify-center shrink-0 shadow-sm">
-                            ${iconSvg}
+                    <div class="flex flex-col w-full px-2 py-0.5 pointer-events-none overflow-hidden" style="height:100%;-webkit-font-smoothing:antialiased;text-shadow:${textColor === '#ffffff' ? '-0.5px -0.5px 0 rgba(0,0,0,0.4), 0.5px -0.5px 0 rgba(0,0,0,0.4), -0.5px 0.5px 0 rgba(0,0,0,0.4), 0.5px 0.5px 0 rgba(0,0,0,0.4)' : '-0.5px -0.5px 0 rgba(0,0,50,0.25), 0.5px -0.5px 0 rgba(0,0,50,0.25), -0.5px 0.5px 0 rgba(0,0,50,0.25), 0.5px 0.5px 0 rgba(0,0,50,0.25)'}">
+                        <div class="flex items-center gap-1.5 shrink-0" style="min-height:18px">
+                            ${cita.pacienteNumPac ? `<span class="text-[10px] font-bold shrink-0 px-1 py-0 rounded" style="color:#1e3a5f;background:white">${cita.pacienteNumPac}</span>` : ''}
+                            <span class="text-[12px] font-extrabold truncate leading-tight" style="color:${textColor}">${cita.nombrePaciente || 'Sin datos'}</span>
                         </div>
-                        <!-- Patient + Treatment -->
-                        <div class="flex flex-col flex-1 min-w-0">
-                            <span class="text-[15px] font-bold text-slate-800 leading-tight truncate">${cita.nombrePaciente || 'Sin datos'}</span>
-                            ${cita.tratamiento ? `<span class="text-[13px] font-medium leading-tight truncate" style="${cfg.text}">${cita.tratamiento}</span>` : ''}
+                        <div class="flex items-center gap-1.5 shrink-0" style="min-height:16px">
+                            <span class="text-[10px] font-bold truncate leading-tight" style="color:${textColor}">${cita.tratamiento || ''}</span>
+                            <span class="text-[9px] font-bold shrink-0 opacity-70" style="color:${textColor}">${cita.duracionMinutos}'</span>
+                            <span class="ml-auto text-[9px] font-normal shrink-0 px-1 py-0 rounded" style="background:white;color:#1e3a5f">${cita.estado ? cita.estado.charAt(0).toUpperCase() + cita.estado.slice(1) : ''}</span>
                         </div>
-                        <!-- Right: Doctor + Gabinete -->
-                        <div class="flex flex-col items-end shrink-0 text-right">
-                            <span class="text-[12px] font-bold text-slate-600 bg-white/60 px-2 py-0.5 rounded-md">${cita.doctor ? cita.doctor.split(' ').slice(-1)[0] : ''}</span>
-                            <span class="text-[11px] font-medium text-slate-400 mt-0.5">${cita.gabinete === 'G1' ? 'Gabinete 1' : 'Gabinete 2'}${cita.duracionMinutos >= 60 ? ' · ' + cita.duracionMinutos + ' min' : ''}</span>
-                        </div>
-                        ${cita.estado === 'gabinete' ? '<span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)] animate-pulse shrink-0 ml-1"></span>' : ''}
+                        ${cita.notas ? `<div class="text-[9px] font-medium truncate shrink-0 opacity-75 leading-tight" style="color:${textColor}">📝 ${cita.notas}</div>` : ''}
                     </div>
                 `;
 
@@ -502,7 +548,7 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
                         <div className="flex items-center justify-center bg-transparent h-8 px-2 transition-all">
                             <input
                                 type="date"
-                                value={selectedDate.toISOString().split('T')[0]}
+                                value={dateToISO(selectedDate)}
                                 onChange={e => {
                                     if (e.target.value) {
                                         const d = new Date(e.target.value + 'T00:00:00');
@@ -562,13 +608,15 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
                     <div className="flex items-center p-0.5 rounded-lg bg-slate-100 border border-slate-200">
                         <button
                             onClick={() => setVistaTemporal('dia')}
-                            className={`text-[11px] font-bold px-3 py-1.5 rounded-md transition-all ${vistaTemporal === 'dia' ? 'bg-cyan-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                            className={`text-[11px] font-bold px-3 py-1.5 rounded-md transition-all ${vistaTemporal === 'dia' ? 'text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                            style={vistaTemporal === 'dia' ? { background: 'linear-gradient(135deg, #1d4ed8, #2563eb)' } : {}}
                         >
                             Día
                         </button>
                         <button
                             onClick={() => setVistaTemporal('semana')}
-                            className={`text-[11px] font-bold px-3 py-1.5 rounded-md transition-all ${vistaTemporal === 'semana' ? 'bg-cyan-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                            className={`text-[11px] font-bold px-3 py-1.5 rounded-md transition-all ${vistaTemporal === 'semana' ? 'text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                            style={vistaTemporal === 'semana' ? { background: 'linear-gradient(135deg, #1d4ed8, #2563eb)' } : {}}
                         >
                             Semana
                         </button>
@@ -690,37 +738,29 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
             {/* Main grid */}
             < main className="flex-1 flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden" >
 
-                {/* Column headers */}
-                < div className="flex border-b border-slate-200 sticky top-0 z-30 h-12 shrink-0 bg-slate-50" >
+                {/* Column headers — must match body: 90px | flex-1 | 90px | flex-1 */}
+                <div className="flex border-b border-slate-200 sticky top-0 z-30 h-12 shrink-0 bg-slate-50">
                     <div className="w-[90px] shrink-0 border-r border-slate-200 flex items-center justify-center">
                         <span className="text-[13px] font-bold text-slate-400 uppercase tracking-wider">Hora</span>
                     </div>
-                    <div className={`flex-1 grid ${vistaGabinete === 'ALL' ? 'grid-cols-2' : 'grid-cols-1'} divide-x divide-slate-200`}>
-                        {(vistaGabinete === 'ALL' || vistaGabinete === 'G1') && (
-                            <div className="flex items-center justify-center gap-2.5 group hover:bg-white/80 transition-colors cursor-pointer">
-                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                                <span className="text-[14px] font-bold text-slate-700 uppercase tracking-wide">Dr. Mario Rubio</span>
-                            </div>
-                        )}
-                        {vistaGabinete === 'ALL' && (
-                            <div className="flex items-center gap-1">
-                                <div className="w-[90px] shrink-0 border-x border-slate-200 flex items-center justify-center">
-                                    <span className="text-[13px] font-bold text-slate-400 uppercase tracking-wider">Hora</span>
-                                </div>
-                                <div className="flex-1 flex items-center justify-center gap-2.5">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                                    <span className="text-[14px] font-bold text-slate-700 uppercase tracking-wide">Dra. Irene García</span>
-                                </div>
-                            </div>
-                        )}
-                        {vistaGabinete === 'G2' && (
-                            <div className="flex items-center justify-center gap-2.5 group hover:bg-white/80 transition-colors cursor-pointer">
-                                <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                                <span className="text-[14px] font-bold text-slate-700 uppercase tracking-wide">Dra. Irene García</span>
-                            </div>
-                        )}
-                    </div>
-                </div >
+                    {(vistaGabinete === 'ALL' || vistaGabinete === 'G1') && (
+                        <div className={`flex-1 flex items-center justify-center gap-2.5 ${vistaGabinete === 'ALL' ? 'border-r border-slate-200' : ''}`}>
+                            <span className="w-2.5 h-2.5 rounded-full" style={{ background: 'linear-gradient(135deg, #1d4ed8, #2563eb)' }} />
+                            <span className="text-[14px] font-bold text-slate-700 uppercase tracking-wide">{(() => { const docs = [...new Set(citas.filter(c => c.gabinete === 'G1').map(c => c.doctor))]; return docs.length > 0 ? docs.join(', ') : 'Doctores'; })()}</span>
+                        </div>
+                    )}
+                    {vistaGabinete === 'ALL' && (
+                        <div className="w-[90px] shrink-0 border-r border-slate-200 flex items-center justify-center">
+                            <span className="text-[13px] font-bold text-slate-400 uppercase tracking-wider">Hora</span>
+                        </div>
+                    )}
+                    {(vistaGabinete === 'ALL' || vistaGabinete === 'G2') && (
+                        <div className="flex-1 flex items-center justify-center gap-2.5">
+                            <span className="w-2.5 h-2.5 rounded-full" style={{ background: 'linear-gradient(135deg, #1d4ed8, #2563eb)' }} />
+                            <span className="text-[14px] font-bold text-slate-700 uppercase tracking-wide">{(() => { const docs = [...new Set(citas.filter(c => c.gabinete === 'G2').map(c => c.doctor))]; return docs.length > 0 ? docs.join(', ') : 'Sanitarios'; })()}</span>
+                        </div>
+                    )}
+                </div>
 
                 {/* Scrollable grid body */}
                 < div ref={scrollContainerRef} className="flex-1 overflow-y-auto bg-white relative" >
@@ -746,30 +786,18 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
                         )
                     }
 
-                    {/* Empty day state */}
-                    {
-                        !loadingCitas && !citasError && citas.length === 0 && (
-                            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 pointer-events-none">
-                                <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-3xl">📅</div>
-                                <div className="text-center">
-                                    <p className="text-[13px] font-black text-slate-500 uppercase tracking-wider">Sin citas para hoy</p>
-                                    <p className="text-[11px] text-slate-400 mt-1">Haz clic derecho en un slot para crear una cita</p>
-                                </div>
-                            </div>
-                        )
-                    }
+                    {/* Empty day state — removed, shown per-column instead */}
 
                     <div className="flex relative">
                         {/* Timeline column */}
                         <div
                             ref={timelineRef}
-                            className="w-[90px] shrink-0 border-r border-slate-200 bg-white relative z-20"
+                            className="w-[90px] shrink-0 border-r border-slate-200 bg-white relative z-30"
                             style={{ height: totalHeight, overflow: 'visible' }}
                         />
 
-                        {/* Gabinete 1 */}
                         <div
-                            className={`flex-1 relative ${vistaGabinete === 'G2' ? 'hidden' : 'block'}`}
+                            className={`flex-1 relative ${vistaGabinete === 'G2' ? 'hidden' : 'block'} cursor-pointer`}
                             style={{
                                 height: totalHeight,
                                 backgroundColor: '#ffffff',
@@ -780,22 +808,62 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
                                 ].join(','),
                                 backgroundSize: `100% ${pxPerHour}px, 100% ${pxPerHour / 2}px, 100% ${pxPerHour / 4}px`,
                             }}
+                            onClick={(e) => {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                const y = e.clientY - rect.top;
+                                const totalMin = y / (pxPerHour / 60);
+                                const snapMin = Math.floor(totalMin / 15) * 15;
+                                let accumulated = 0;
+                                let newH = workingSegments[0][0];
+                                let newM = 0;
+                                for (const [start, end] of workingSegments) {
+                                    const segMin = (end - start) * 60;
+                                    if (snapMin - accumulated < segMin) {
+                                        const rem = snapMin - accumulated;
+                                        newH = start + Math.floor(rem / 60);
+                                        newM = rem % 60;
+                                        break;
+                                    }
+                                    accumulated += segMin;
+                                }
+                                const horaStr = `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+                                setEditingCita({
+                                    id: crypto.randomUUID(),
+                                    gabinete: 'G1',
+                                    pacienteNumPac: '',
+                                    nombrePaciente: '',
+                                    horaInicio: horaStr,
+                                    duracionMinutos: 30,
+                                    tratamiento: 'Control',
+                                    categoria: 'Diagnostico',
+                                    estado: 'planificada',
+                                    doctor: 'Dr. Mario Rubio',
+                                    alertasMedicas: [],
+                                    alertasLegales: [],
+                                    alertasFinancieras: false,
+                                    notas: '',
+                                });
+                            }}
                         >
                             <div ref={slotsG1Ref} className="relative w-full" style={{ height: totalHeight }} />
+                            {!loadingCitas && !citasError && citas.filter(c => c.gabinete === 'G1').length === 0 && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
+                                    <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Sin citas</p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Second timeline (only when both gabinetes visible) */}
                         {vistaGabinete === 'ALL' && (
                             <div
                                 ref={timeline2Ref}
-                                className="w-[90px] shrink-0 border-x border-slate-200 bg-white relative z-20"
+                                className="w-[90px] shrink-0 border-x border-slate-200 bg-white relative z-30"
                                 style={{ height: totalHeight, overflow: 'visible' }}
                             />
                         )}
 
-                        {/* Gabinete 2 */}
                         <div
-                            className={`flex-1 relative ${vistaGabinete === 'G1' ? 'hidden' : 'block'}`}
+                            className={`flex-1 relative ${vistaGabinete === 'G1' ? 'hidden' : 'block'} cursor-pointer`}
                             style={{
                                 height: totalHeight,
                                 backgroundColor: '#ffffff',
@@ -806,8 +874,49 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
                                 ].join(','),
                                 backgroundSize: `100% ${pxPerHour}px, 100% ${pxPerHour / 2}px, 100% ${pxPerHour / 4}px`,
                             }}
+                            onClick={(e) => {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                const y = e.clientY - rect.top;
+                                const totalMin = y / (pxPerHour / 60);
+                                const snapMin = Math.floor(totalMin / 15) * 15;
+                                let accumulated = 0;
+                                let newH = workingSegments[0][0];
+                                let newM = 0;
+                                for (const [start, end] of workingSegments) {
+                                    const segMin = (end - start) * 60;
+                                    if (snapMin - accumulated < segMin) {
+                                        const rem = snapMin - accumulated;
+                                        newH = start + Math.floor(rem / 60);
+                                        newM = rem % 60;
+                                        break;
+                                    }
+                                    accumulated += segMin;
+                                }
+                                const horaStr = `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+                                setEditingCita({
+                                    id: crypto.randomUUID(),
+                                    gabinete: 'G2',
+                                    pacienteNumPac: '',
+                                    nombrePaciente: '',
+                                    horaInicio: horaStr,
+                                    duracionMinutos: 30,
+                                    tratamiento: 'Control',
+                                    categoria: 'Diagnostico',
+                                    estado: 'planificada',
+                                    doctor: 'Dra. Irene Garcia',
+                                    alertasMedicas: [],
+                                    alertasLegales: [],
+                                    alertasFinancieras: false,
+                                    notas: '',
+                                });
+                            }}
                         >
                             <div ref={slotsG2Ref} className="relative w-full" style={{ height: totalHeight }} />
+                            {!loadingCitas && !citasError && citas.filter(c => c.gabinete === 'G2').length === 0 && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
+                                    <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Sin citas</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div >
@@ -906,25 +1015,106 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
                                 </button>
                             </div>
                             <div className="p-5">
-                                <div className="mb-4">
+                                <div className="mb-4 relative">
                                     <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Paciente</label>
-                                    <input
-                                        type="text"
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-[13px] font-bold text-[#051650] focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                        value={editingCita.nombrePaciente}
-                                        onChange={e => setEditingCita({ ...editingCita, nombrePaciente: e.target.value })}
-                                    />
+                                    <div className="flex gap-2 mb-1">
+                                        <div className="flex-1 relative">
+                                            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                            <input
+                                                type="text"
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-[13px] font-bold text-[#051650] focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                placeholder="Buscar por nombre, ID, teléfono..."
+                                                value={patientQuery || editingCita.nombrePaciente}
+                                                onChange={e => {
+                                                    const val = e.target.value;
+                                                    setPatientQuery(val);
+                                                    setEditingCita({ ...editingCita, nombrePaciente: val });
+                                                    if (patientSearchTimer.current) clearTimeout(patientSearchTimer.current);
+                                                    patientSearchTimer.current = setTimeout(async () => {
+                                                        if (val.trim().length >= 2) {
+                                                            const results = await searchPacientes(val.trim());
+                                                            setPatientResults(results);
+                                                            setShowPatientDropdown(true);
+                                                        } else {
+                                                            setPatientResults([]);
+                                                            setShowPatientDropdown(false);
+                                                        }
+                                                    }, 300);
+                                                }}
+                                                onFocus={async () => {
+                                                    if (patientQuery.trim().length >= 2) {
+                                                        setShowPatientDropdown(true);
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+                                        <div className="w-20">
+                                            <input
+                                                type="text"
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-[13px] font-bold text-[#051650] text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                placeholder="ID"
+                                                value={editingCita.pacienteNumPac}
+                                                onChange={e => setEditingCita({ ...editingCita, pacienteNumPac: e.target.value })}
+                                                title="NumPac / ID del paciente"
+                                            />
+                                        </div>
+                                    </div>
+                                    {/* Dropdown de resultados */}
+                                    {showPatientDropdown && patientResults.length > 0 && (
+                                        <div className="absolute left-0 right-0 top-full z-50 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto mt-1">
+                                            {patientResults.map(p => (
+                                                <button
+                                                    key={p.numPac}
+                                                    className="w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left transition-colors border-b border-slate-50 last:border-0"
+                                                    onClick={() => {
+                                                        setEditingCita({
+                                                            ...editingCita,
+                                                            nombrePaciente: `${p.apellidos}, ${p.nombre}`.trim(),
+                                                            pacienteNumPac: p.numPac,
+                                                        });
+                                                        setPatientQuery('');
+                                                        setShowPatientDropdown(false);
+                                                    }}
+                                                >
+                                                    <span className="text-[10px] font-bold text-white px-1.5 py-0.5 rounded" style={{ background: 'linear-gradient(135deg, #1d4ed8, #2563eb)' }}>{p.numPac}</span>
+                                                    <span className="text-[12px] font-bold text-slate-800 truncate">{p.apellidos}, {p.nombre}</span>
+                                                    {p.telefono && <span className="text-[10px] text-slate-400 ml-auto shrink-0">📞 {p.telefono}</span>}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {showPatientDropdown && patientResults.length === 0 && patientQuery.trim().length >= 2 && (
+                                        <div className="absolute left-0 right-0 top-full z-50 bg-white border border-slate-200 rounded-xl shadow-xl mt-1 p-3 text-center">
+                                            <p className="text-[11px] text-slate-400">Sin resultados</p>
+                                            <button
+                                                className="text-[11px] font-bold text-blue-600 mt-1 hover:underline"
+                                                onClick={() => {
+                                                    setEditingCita({ ...editingCita, nombrePaciente: patientQuery, pacienteNumPac: '' });
+                                                    setShowPatientDropdown(false);
+                                                }}
+                                            >
+                                                + Paciente nuevo
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-3 mb-4">
                                     <div>
                                         <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Tratamiento</label>
-                                        <input
-                                            type="text"
+                                        <select
                                             className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-[13px] font-bold text-[#051650] focus:ring-2 focus:ring-blue-500 focus:outline-none"
                                             value={editingCita.tratamiento}
                                             onChange={e => setEditingCita({ ...editingCita, tratamiento: e.target.value })}
-                                        />
+                                        >
+                                            {['Ajuste Prot/tto', 'Cirugia de Implante', 'Cirugia/Injerto',
+                                                'Colocacion Ortodoncia', 'Control', 'Endodoncia',
+                                                'Estudio Ortodoncia', 'Exodoncia', 'Higiene Dental',
+                                                'Mensualidad Ortodoncia', 'Periodoncia', 'Primera Visita',
+                                                'Protesis Fija', 'Protesis Removible', 'Reconstruccion',
+                                                'Retirar Ortodoncia', 'Rx/escaner', 'Urgencia'
+                                            ].map(t => <option key={t} value={t}>{t}</option>)}
+                                        </select>
                                     </div>
                                     <div>
                                         <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Doctor</label>
@@ -933,9 +1123,12 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
                                             value={editingCita.doctor}
                                             onChange={e => setEditingCita({ ...editingCita, doctor: e.target.value })}
                                         >
-                                            <option value="Dra. Rubio">Dra. Rubio</option>
-                                            <option value="Dr. García">Dr. García</option>
-                                            <option value="Hig. Sonia">Hig. Sonia</option>
+                                            <option value="Dr. Mario Rubio">Dr. Mario Rubio</option>
+                                            <option value="Dra. Irene Garcia">Dra. Irene Garcia</option>
+                                            <option value="Dra. Virginia Tresgallo">Dra. Virginia Tresgallo</option>
+                                            <option value="Dr. Ignacio Ferrero">Dr. Ignacio Ferrero</option>
+                                            <option value="Dra. Miriam Carrasco">Dra. Miriam Carrasco</option>
+                                            <option value="Tc. Juan Antonio Manzanedo">Tc. Juan Antonio Manzanedo</option>
                                         </select>
                                     </div>
                                 </div>
@@ -943,12 +1136,18 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
                                 <div className="grid grid-cols-2 gap-3 mb-4">
                                     <div>
                                         <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Hora Inicio</label>
-                                        <input
-                                            type="time"
+                                        <select
                                             className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-[13px] font-bold text-[#051650] focus:ring-2 focus:ring-blue-500 focus:outline-none"
                                             value={editingCita.horaInicio}
                                             onChange={e => setEditingCita({ ...editingCita, horaInicio: e.target.value })}
-                                        />
+                                        >
+                                            {Array.from({ length: 14 * 4 }, (_, i) => {
+                                                const h = Math.floor(i / 4) + 8;
+                                                const m = (i % 4) * 15;
+                                                const val = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                                                return <option key={val} value={val}>{val}</option>;
+                                            })}
+                                        </select>
                                     </div>
                                     <div>
                                         <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Duración</label>
@@ -962,6 +1161,35 @@ const Agenda: React.FC<AgendaProps> = ({ activeSubArea }) => {
                                             ))}
                                         </select>
                                     </div>
+                                </div>
+
+                                <div className="mb-4">
+                                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Situación Cita</label>
+                                    <select
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-[13px] font-bold text-[#051650] focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                        value={editingCita.estado}
+                                        onChange={e => setEditingCita({ ...editingCita, estado: e.target.value as any })}
+                                    >
+                                        <option value="planificada">Planificada</option>
+                                        <option value="confirmada">Confirmada</option>
+                                        <option value="espera">En Sala de Espera</option>
+                                        <option value="gabinete">En Gabinete</option>
+                                        <option value="finalizada">Finalizada</option>
+                                        <option value="fallada">No Show / Fallada</option>
+                                        <option value="anulada">Anulada</option>
+                                        <option value="cancelada">Cancelada</option>
+                                    </select>
+                                </div>
+
+                                <div className="mb-4">
+                                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Notas / Observaciones</label>
+                                    <textarea
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-[13px] text-[#051650] focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none"
+                                        rows={3}
+                                        placeholder="Notas libres sobre la cita..."
+                                        value={editingCita.notas || ''}
+                                        onChange={e => setEditingCita({ ...editingCita, notas: e.target.value })}
+                                    />
                                 </div>
 
                                 <div className="flex justify-end gap-2 mt-6 border-t border-slate-100 pt-4">

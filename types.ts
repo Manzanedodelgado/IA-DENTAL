@@ -108,6 +108,7 @@ export interface Cita {
     presupuestoPendiente?: boolean; // Icono $
     pruebasPendientes?: boolean; // Icono Rayos X
     trabajoLaboratorio?: boolean; // Icono Matraz
+    notas?: string;              // NOTAS de DCitas
 }
 
 // --- 5.0 INVENTARIO & TRAZABILIDAD ---

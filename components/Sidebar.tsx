@@ -171,11 +171,12 @@ const Sidebar: React.FC<SidebarProps> = ({ activeArea, activeSubArea, onNavigate
                                     onClick={() => onNavigate(activeArea, subItem.name)}
                                     className={`flex items-center rounded-lg group transition-all duration-200 ${isExpanded ? 'w-full gap-3 px-4 py-2.5 border-l-4' : 'w-12 h-12 justify-center mx-auto border-l-[3px]'
                                         } ${isActive
-                                            ? 'bg-[#0ea5e9]/15 border-[#0ea5e9] text-white shadow-sm'
+                                            ? 'border-[#1d4ed8] text-white shadow-sm'
                                             : 'bg-transparent border-transparent text-white/60 hover:bg-white/8 hover:text-white/90'
                                         }`}
+                                    style={isActive ? { background: 'linear-gradient(135deg, rgba(29,78,216,0.25), rgba(37,99,235,0.15))' } : {}}
                                 >
-                                    <SubIcon className={`flex-shrink-0 ${isExpanded ? 'w-4 h-4' : 'w-[18px] h-[18px]'} ${isActive ? 'text-[#0ea5e9]' : 'text-white/60 group-hover:text-white'}`} />
+                                    <SubIcon className={`flex-shrink-0 ${isExpanded ? 'w-4 h-4' : 'w-[18px] h-[18px]'} ${isActive ? 'text-[#60a5fa]' : 'text-white/60 group-hover:text-white'}`} />
 
                                     {isExpanded && (
                                         <div className="flex-1 flex items-center justify-between min-w-0 animate-fade-in">
@@ -183,7 +184,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeArea, activeSubArea, onNavigate
                                                 {subItem.name}
                                             </span>
                                             {isActive && (
-                                                <ChevronRight className="w-3.5 h-3.5 text-[#0ea5e9]/60" />
+                                                <ChevronRight className="w-3.5 h-3.5 text-[#60a5fa]/60" />
                                             )}
                                         </div>
                                     )}

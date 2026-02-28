@@ -40,7 +40,7 @@ const Login: React.FC = () => {
 
                     {/* Brand / Logo */}
                     <div className="text-center mb-10">
-                        <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-[#002855] to-[#0056b3] rounded-2xl shadow-lg mb-4">
+                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl shadow-lg mb-4" style={{ background: 'linear-gradient(135deg, #1d4ed8, #2563eb)' }}>
                             <ShieldCheck className="text-white w-8 h-8" />
                         </div>
                         <h1 className="text-2xl font-black text-[#002855] tracking-tight">SmilePro <span className="text-[#0056b3]">2026</span></h1>
@@ -88,7 +88,8 @@ const Login: React.FC = () => {
                         <button
                             type="submit"
                             disabled={loading}
-                            className={`w-full py-4 rounded-2xl bg-gradient-to-r from-[#002855] to-[#0056b3] text-white font-bold text-sm shadow-xl shadow-blue-900/10 hover:shadow-blue-900/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 group ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            className={`w-full py-4 rounded-2xl text-white font-bold text-sm shadow-xl shadow-blue-900/10 hover:shadow-blue-900/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 group ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            style={{ background: 'linear-gradient(135deg, #1d4ed8, #2563eb)' }}
                         >
                             {loading ? (
                                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
